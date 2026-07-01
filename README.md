@@ -30,6 +30,12 @@ LeetcodeUltra 的目标是把这些碎片整理成一个更像 IDE 的 LeetCode 
 - 通过、答案错误、运行中、请求失败等状态用更清晰的中文结果呈现。
 - Accepted 结果首屏展示关键信息，减少无效滚动。
 
+![Workbench correct case result](./resources/marketplace/console-correct.png)
+
+![Workbench wrong answer result](./resources/marketplace/console-wrong-answer.png)
+
+![Workbench accepted result with performance charts](./resources/marketplace/console-accepted.png)
+
 ### 2. 提交结果和性能分布
 
 Accepted 不只是一个绿色状态。LeetcodeUltra 会把运行时间和内存占用整理成紧凑的性能卡片，让你快速判断这次提交处在什么位置。
@@ -73,6 +79,8 @@ C++ 调试优先复用成熟的 [LeetCode Debugger for C++](https://github.com/x
 - 自动设置入口断点 / 函数断点，避免程序一闪而过。
 - 与 `vadimcn.vscode-lldb` 配合使用。
 
+![C++ debugging with LeetcodeUltra](./resources/marketplace/cpp-debug.png)
+
 推荐安装：
 
 - `xaviercai.vscode-leetcode-cpp-debug`
@@ -95,6 +103,8 @@ AI 调试目前是实验能力，默认关闭。普通 C++ 调试不依赖它，
 当你在控制台勾选 `开启 AI 调试` 后，LeetcodeUltra 会在调试会话启动后打开 AI 调试视图，尝试分析并展示关键变量。它适合继续探索数组、字符串、容器、链表等常见结构的可视化调试，但现阶段仍建议把它当作辅助观察面板，而不是稳定主流程。
 
 这也是为什么开关默认关闭：日常使用先保证本地调试稳定，AI 能力逐步迭代。
+
+![Experimental AI debugging panel](./resources/marketplace/ai-debug-panel.png)
 
 ### 7. 题单、评分和练习管理
 

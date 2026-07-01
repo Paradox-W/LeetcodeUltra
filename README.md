@@ -4,7 +4,7 @@ LeetcodeUltra 是一个面向高频刷题、复盘和本地调试重新设计的
 
 它不是只把题目拉到编辑器里，而是把题目阅读、测试用例、运行结果、提交记录、性能分布、备注和 C++ 调试整理成一条连续的工作流。你可以在 VS Code 里打开题目、编辑代码、管理用例、查看提交历史、复盘错误版本，并在需要时启动本地调试。
 
-![LeetcodeUltra workspace overview](./resources/marketplace/workspace-overview.png)
+![LeetcodeUltra workspace overview](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/workspace-overview.png)
 
 ## 为什么做 LeetcodeUltra
 
@@ -30,11 +30,11 @@ LeetcodeUltra 的目标是把这些碎片整理成一个更像 IDE 的 LeetCode 
 - 通过、答案错误、运行中、请求失败等状态用更清晰的中文结果呈现。
 - Accepted 结果首屏展示关键信息，减少无效滚动。
 
-![Workbench correct case result](./resources/marketplace/console-correct.png)
+![Workbench correct case result](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/console-correct.png)
 
-![Workbench wrong answer result](./resources/marketplace/console-wrong-answer.png)
+![Workbench wrong answer result](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/console-wrong-answer.png)
 
-![Workbench accepted result with performance charts](./resources/marketplace/console-accepted.png)
+![Workbench accepted result with performance charts](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/console-accepted.png)
 
 ### 2. 提交结果和性能分布
 
@@ -45,7 +45,7 @@ Accepted 不只是一个绿色状态。LeetcodeUltra 会把运行时间和内存
 - 支持百分位、局部分布和当前位置标记。
 - 小尺寸底部面板也能看清主要信息。
 
-![Submission detail and performance charts](./resources/marketplace/submission-detail.png)
+![Submission detail and performance charts](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/submission-detail.png)
 
 ### 3. 右侧题目助手
 
@@ -67,7 +67,7 @@ Accepted 不只是一个绿色状态。LeetcodeUltra 会把运行时间和内存
 - 详情页展示提交代码、性能图表和备注编辑区。
 - 备注保存在工作区 `.lcpr_data/submission-notes/`，方便跟随刷题目录管理。
 
-![Submission history](./resources/marketplace/submission-history.png)
+![Submission history](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/submission-history.png)
 
 ### 5. 更顺手的 C++ 本地调试
 
@@ -79,7 +79,7 @@ C++ 调试优先复用成熟的 [LeetCode Debugger for C++](https://github.com/x
 - 自动设置入口断点 / 函数断点，避免程序一闪而过。
 - 与 `vadimcn.vscode-lldb` 配合使用。
 
-![C++ debugging with LeetcodeUltra](./resources/marketplace/cpp-debug.png)
+![C++ debugging with LeetcodeUltra](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/cpp-debug.png)
 
 推荐安装：
 
@@ -104,7 +104,7 @@ AI 调试目前是实验能力，默认关闭。普通 C++ 调试不依赖它，
 
 这也是为什么开关默认关闭：日常使用先保证本地调试稳定，AI 能力逐步迭代。
 
-![Experimental AI debugging panel](./resources/marketplace/ai-debug-panel.png)
+![Experimental AI debugging panel](https://cdn.jsdelivr.net/gh/Paradox-W/LeetcodeUltra@main/resources/marketplace/ai-debug-panel.png)
 
 ### 7. 题单、评分和练习管理
 

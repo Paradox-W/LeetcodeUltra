@@ -1,334 +1,165 @@
 # LeetcodeUltra
 
-LeetcodeUltra is an enhanced, independently named build derived from
-[ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension), which
-is licensed under the MIT License. Upstream attribution is preserved in
-[NOTICE.md](./NOTICE.md).
+LeetcodeUltra 是一个面向高频刷题、复盘和本地调试重新设计的 VS Code LeetCode 助手。
 
-Project repository: https://github.com/Paradox-W/LeetcodeUltra
+它不是只把题目拉到编辑器里，而是把题目阅读、测试用例、运行结果、提交记录、性能分布、备注和 C++ 调试整理成一条连续的工作流。你可以在 VS Code 里打开题目、编辑代码、管理用例、查看提交历史、复盘错误版本，并在需要时启动本地调试。
 
-Upstream project: https://github.com/ccagml/leetcode-extension
+![LeetcodeUltra workspace overview](./resources/marketplace/workspace-overview.png)
 
-# 概要设计
+## 为什么做 LeetcodeUltra
 
-- 在 VS Code 中解决 Leetcode 问题
-- Leetcode 只提供了简单、中等、困难的难度区分。题目与题目之间难度差别很大，因此需要客观的分数对题目难度进行打分
-- 增加中文官方的每日一题
-- 修复 tag 分类错误
-- 增加精选分类
-- 增加剑指 Offer、面试金典相关内容
-- 增加一键提交全部题目测试用例功能
-- 尝试不需要额外安装 node 环境,使用 vscode 自带的 node 版本
-- 从[zerotrac.github.io](https://zerotrac.github.io/leetcode_problem_rating/data.json)获取数据进行缓存,数据更新时,可以尝试使用 deleteAllCache,重新获取数据
-- [新增区块测试用例](#区块测试用例)
-- [新增搬砖功能(重复练习?)](#搬砖功能的说明)
-- [状态栏增加简易计时器](#状态栏增加简易计时器)
-- [新增一个 remark 功能](#新增在工作目录存放数据)
-- [新增题目自定义分类](#新增在工作目录存放数据)
-- [答案不同上色,配置默认不开启](#插件配置项)
-- 增加获取中文站的题解
-- [增加 C++ 调试与可选 AI 调试](#c-调试与-ai-调试)
-- 增加 cpp、js、py3 一些题目的 debug(参考 wangtao0101 项目,有问题提 issues)
-- [有些题目原插件无法调试,请尝试配置区域调试参数](#区域调试参数的一些说明)
-- [国际站修改登录方式 cRUL 方式登录](#cRUL 登录)
-- [增加近期竞赛回顾](#近期竞赛回顾)
+原始 LeetCode 插件解决了“能在 VS Code 刷题”的问题，但高频刷题时真正消耗时间的地方往往不是打开题目，而是这些细节：
 
-# 关于本项目
+- 多个测试用例反复复制、修改、保存。
+- 运行结果、提交结果和题目描述分散在不同位置。
+- 提交记录很难和当时的思路、错误原因对应起来。
+- Accepted 之后只看到一个结果，不容易判断性能表现是否稳定。
+- C++ 本地调试需要 wrapper、输入文件、断点和调试器配置配合，流程容易断。
 
-- [项目地址:https://github.com/Paradox-W/LeetcodeUltra](https://github.com/Paradox-W/LeetcodeUltra)
-- [上游项目:https://github.com/ccagml/leetcode-extension/](https://github.com/ccagml/leetcode-extension/)
-- [报告问题](https://github.com/Paradox-W/LeetcodeUltra/issues)
-- [疑难解答](https://github.com/LeetCode-OpenSource/vscode-leetcode/wiki/%E7%96%91%E9%9A%BE%E8%A7%A3%E7%AD%94)
-- [常见问题](https://github.com/LeetCode-OpenSource/vscode-leetcode/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
+LeetcodeUltra 的目标是把这些碎片整理成一个更像 IDE 的 LeetCode 工作台。
 
-## 快速开始
+## 核心亮点
 
-![quickstart](https://www.ccagml.com/wp-content/uploads/2022/10/quickstart.gif)
+### 1. 重新设计的力扣控制台
 
-## tag 分类
+底部控制台被重做为“结果区 + 用例区”的工作台。提交、运行全部用例、单用例运行、单用例调试都在同一处完成，不需要在命令面板、编辑器和终端之间来回切。
 
-![tag](https://www.ccagml.com/wp-content/uploads/2022/10/tag.gif)
+- 每个用例独立展示，支持编辑、运行、调试、删除。
+- 测试用例直接在控制台里改，自动写回题目文件。
+- 支持恢复官方默认用例。
+- 通过、答案错误、运行中、请求失败等状态用更清晰的中文结果呈现。
+- Accepted 结果首屏展示关键信息，减少无效滚动。
 
-## 查询功能
+### 2. 提交结果和性能分布
 
-![search](https://www.ccagml.com/wp-content/uploads/2022/10/search.gif)
+Accepted 不只是一个绿色状态。LeetcodeUltra 会把运行时间和内存占用整理成紧凑的性能卡片，让你快速判断这次提交处在什么位置。
 
-## 近期竞赛回顾
+- 展示用例通过数量、语言、运行时间、内存占用。
+- 运行时间和内存分布以图表方式展示。
+- 支持百分位、局部分布和当前位置标记。
+- 小尺寸底部面板也能看清主要信息。
 
-![search](./resources/leetcode-extension-recentcontests.gif)
+![Submission detail and performance charts](./resources/marketplace/submission-detail.png)
 
-  - 近期比赛数据和比赛的题目通过中文官网在线获取
-  - 国际站并无对应api，因此即使在国际站点下也是通过中文站点获取的数据，同时由于没有登录参数，可能存在无法获取数据的情况。
+### 3. 右侧题目助手
 
-## 区块测试用例
+题目描述、题解、提示和提交记录集中在右侧栏，代码编辑区保持稳定，不再频繁打开临时预览页或打断当前文件。
 
-### 例子(cpp 文件为例)
+- 题目描述适配侧栏阅读。
+- 示例输入、输出、解释重新排版。
+- 题解、讨论、提交记录在题目上下文里切换。
+- 难度与标签收纳在题目底部，减少干扰。
+- 适合宽屏下“左边题单 / 中间代码 / 右边题目与记录”的布局。
 
-```
-// @lcpr case=start
-// "PAYPALISHIRINGGGG"\n3\n
-// @lcpr case=end
-```
+### 4. 提交记录、详情和本地备注
 
-### 说明
+提交记录被做成原生侧栏列表。你可以查看每次提交的状态、语言、时间、运行时间和内存，并打开详情页复盘代码。
 
-- 以 @lcpr case=start 开头
-- 第二行存放原本手动填写测试用例
-- 以 @lcpr case=end 结尾
+- 支持按状态和语言筛选提交记录。
+- 支持备注搜索。
+- 每条提交可以写本地备注，记录当时的错误原因、优化点或复盘结论。
+- 详情页展示提交代码、性能图表和备注编辑区。
+- 备注保存在工作区 `.lcpr_data/submission-notes/`，方便跟随刷题目录管理。
 
-### 一键提交的用例去重
+![Submission history](./resources/marketplace/submission-history.png)
 
-- 简单的比较这些用例字符串是否相同
+### 5. 更顺手的 C++ 本地调试
 
-## C++ 调试与 AI 调试
+C++ 调试优先复用成熟的 [LeetCode Debugger for C++](https://github.com/xavier-cai/vscode-leetcode-cpp-debug) 生成 wrapper，再通过 CodeLLDB 启动本地调试会话。LeetcodeUltra 负责把控制台测试用例和调试输入接起来。
 
-- 控制台每个测试用例右侧提供调试按钮，C++ 调试优先复用
-  [LeetCode Debugger for C++](https://github.com/xavier-cai/vscode-leetcode-cpp-debug)
-  生成的 wrapper，并通过 CodeLLDB 启动本地调试会话。
-- 控制台工具栏提供 `开启 AI 调试` 复选项。默认关闭时只启动普通 C++ 调试，不打开 AI 面板；勾选后才会在调试会话启动后打开 AI 调试视图并采集变量。
-- 建议同时安装 `xaviercai.vscode-leetcode-cpp-debug` 与 `vadimcn.vscode-lldb`。工作区可将
-  `leetcode-cpp-debugger.source` 设置为 `[offline]local`。
-- 调试输入来自当前控制台测试用例，扩展会写入同目录 `test_case.txt`，避免手动在终端重复输入。
+- 从控制台单个用例直接启动调试。
+- 当前用例自动写入 `test_case.txt`，避免在终端重复手输。
+- 自动修补生成的 `leetcode-main.cpp` 输入来源。
+- 自动设置入口断点 / 函数断点，避免程序一闪而过。
+- 与 `vadimcn.vscode-lldb` 配合使用。
 
-## 状态栏增加简易计时器
+推荐安装：
 
-- 查看一个题目时会开始计时,提交一个题目通过后会停止计时
+- `xaviercai.vscode-leetcode-cpp-debug`
+- `vadimcn.vscode-lldb`
 
-## 国际站 cRUL 登录
+推荐工作区配置：
 
-- 使用谷歌浏览器或者其他浏览器
-- F12 查看登录国际站后的请求
-- 选中复制最后一个 graphql 请求
-- 右键->复制-> 以 cURL(bash)格式复制
-- 插件登录选择 使用 cURL Cookie 方式登录,输入账号,输入复制来的 cURL(bash)格式请求数据
-
-## 区域调试参数的一些说明
-
-### 如果有些题目无法 debug,请尝试配置 diy 参数区
-
-1. 例子 cpp 2544 题为例
-   ```
-   // @lcpr-div-debug-arg-start
-   // funName= alternateDigitSum
-   // paramTypes= ["number"]
-   // @lcpr-div-debug-arg-end
-   ```
-2. diy 参数说明
-
-- funName:函数名,既本次解决方法的函数名
-- paramTypes:函数的输入参数,是一个字符串数组类型
-  - 可填入内容为以下字符串
-    - "number"
-      - 类型说明:数字
-    - "number[]"
-      - 类型说明:数字数组
-    - "number[][]"
-      - 类型说明:数字二维数组
-    - "string"
-      - 类型说明:字符串
-    - "string[]"
-      - 类型说明:字符串数组
-    - "string[][]"
-      - 类型说明:字符串二维数组
-    - "ListNode"
-      - 类型说明:链表
-    - "ListNode[]"
-      - 类型说明:链表数组
-    - "character"
-      - 类型说明:字节
-    - "character[]"
-      - 类型说明:字节数组
-    - "character[][]"
-      - 类型说明:字节二维数组
-    - "NestedInteger[]"
-      - 类型说明:数组
-    - "MountainArray"
-      - 类型说明:数组
-    - "TreeNode"
-      - 类型说明:树节点
-
-<!-- ## TODO 看到一些可能会用得上的功能
-
-- (完成) 在文件里面插入一些测试用例?
-- (完成) 不是中文站点,直接隐藏账号密码登录的方式
-- 默认的工作目录修改 不再是.leetcode(不改了)
-- (完成)想做一个可以根据计算下次回顾本题的功能?
-- (需要在设置的工作目录中存放多个文件?)
-- (完成) Test 按钮应该不在需要 case 和 allcase 只要留下输入的功能
-- 备忘录功能(数据直接放设置的工作目录?用 github 同步?)
-- 获取提交历史(直接找官方的提交数据)
-- 提交答案与期望答案不同的地方?
-- (完成)做题目计时
-- (完成)还没出分前周赛题目显示 未评分(需要官网获取最新几期的题目编号)
-- (完成)在线获取周赛编号下的题目
-- 将搜索功能中的竞赛修改为在线获取题目，将周赛与双周赛分开，同时可以检索未出分前的竞赛题目
-- 将近期竞赛的显示数量修改为可配置选项
-- -->
-
-## 搬砖功能的说明
-
-### 功能设想
-
-- 重复做 x 天之前的题目(正确提交后 x 天再做本题)
-- 重复练习可以提高水平?(待定验证)
-- 有什么学习方法可以与我交流,这个方法我也不知道有没有用
-
-### 新增在工作目录存放数据
-
-- 目录说明
-
-  > workspace/ 工作目录
-  >
-  > > .lcpr_data/ 存数据
-  > >
-  > > > bricks.json
-  > >
-  > > > remark 备注数据
-  > > >
-  > > > > qid 备注 remark 数据
-  > >
-  > > > group.json
-
-### bricks.json 存放格式
-
-```
+```json
 {
-   version: 1,
-   all_bricks: {
-     [qid]: {
-        submit_time: [], // 上次提交的时间
-        type: 1, // 类型
-     },
-   },
- };
-
-```
-
-### group.json 存放格式
-
-```
-{
-    "version": 1,
-    "all_group": [
-        {
-            "name": "www",  // 分类名称
-            "time": 1669791273308, // 分类编号
-            "qid_list": [   // 该分类的题目qid
-                "1000229",
-                "1000231"
-            ]
-        }
-    ]
+  "leetcode-cpp-debugger.source": "[offline]local",
+  "leetcode-cpp-debugger.deleteTemporaryContents": false,
+  "leetcode-cpp-debugger.outputFileEncoding": "utf8"
 }
 ```
 
-## 运行条件
+### 6. 可选的实验性 AI 调试
 
-- [VS Code 1.57.0+](https://code.visualstudio.com/)
-- [Node.js 10+](https://nodejs.org)
-  > 注意：请确保`Node`在`PATH`环境变量中。您也可以通过设定 `leetcode.nodePath` 选项来指定 `Node.js` 可执行文件的路径。
+AI 调试目前是实验能力，默认关闭。普通 C++ 调试不依赖它，也不会自动打开 AI 面板。
 
-## 插件配置项
+当你在控制台勾选 `开启 AI 调试` 后，LeetcodeUltra 会在调试会话启动后打开 AI 调试视图，尝试分析并展示关键变量。它适合继续探索数组、字符串、容器、链表等常见结构的可视化调试，但现阶段仍建议把它当作辅助观察面板，而不是稳定主流程。
 
-| 配置项名称<font color=red>显示红色为与官方配置有不同的地方</font>     | 描述                                                                                                                                                                                                                                                                                                                                                                                                          | 默认值                                                           |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| <font color=red>leetcode-problem-rating.hideSolved</font>             | 指定是否要隐藏已解决的问题                                                                                                                                                                                                                                                                                                                                                                                    | `false`                                                          |
-| <font color=red>leetcode-problem-rating.bricksReviewDay</font>             | 设置x天后复习                  |  [1,4,7,14,28,60 ]                                                      |
-| <font color=red>leetcode-problem-rating.showLocked` </font>           | 指定是否显示付费题目，只有付费账户才可以打开付费题目                                                                                                                                                                                                                                                                                                                                                          | `false`                                                          |
-| <font color=red>leetcode-problem-rating.defaultLanguage</font>        | 指定答题时使用的默认语言，可选语言有：`bash`, `c`, `cpp`, `csharp`, `golang`, `java`, `javascript`, `kotlin`, `mysql`, `php`, `python`,`python3`,`ruby`, `rust`, `scala`, `swift`, `typescript`                                                                                                                                                                                                               | `N/A`                                                            |
-| <font color=red>leetcode-problem-rating.useWsl</font>                 | 指定是否启用 WSL                                                                                                                                                                                                                                                                                                                                                                                              | `false`                                                          |
-| <font color=red>leetcode-problem-rating.endpoint</font>               | 指定使用的终端，可用终端有：`leetcode`, `leetcode-cn`                                                                                                                                                                                                                                                                                                                                                         | <font color=red>leetcode.cn</font>                               |
-| <font color=red>leetcode-problem-rating.workspaceFolder</font>        | 指定保存文件的工作区目录例如/home/${USERNAME}/leetcode, 现在会尝试从系统环境变量读取 USERNAME 对应的值, 例如环境变量中 USERNAME 是 ccagml,那么就会是/home/ccagml/leetcode 录                                                                                                                                                                                                                                  | `""`                                                             |
-| <font color=red>leetcode-problem-rating.workspaceFolderList</font>    | 多个等待选择的工作区目录,如果 workspaceFolder 目录不存在,尝试从 workspaceFolderList 选取可用目录                                                                                                                                                                                                                                                                                                              | `["path1", "path2"]`                                             |
-| <font color=red>leetcode-problem-rating.filePath</font>               | 指定生成题目文件的相对文件夹路径名和文件名。点击查看[更多详细用法](https://github.com/LeetCode-OpenSource/vscode-leetcode/wiki/%E8%87%AA%E5%AE%9A%E4%B9%89%E9%A2%98%E7%9B%AE%E6%96%87%E4%BB%B6%E7%9A%84%E7%9B%B8%E5%AF%B9%E6%96%87%E4%BB%B6%E5%A4%B9%E8%B7%AF%E5%BE%84%E5%92%8C%E6%96%87%E4%BB%B6%E5%90%8D)。 额外拓展\${yyyymmdd}对应年月日 20230720、\${timestamp}对应时间戳格式、\${cn_name}题目的中文名称 |                                                                  |
-| <font color=red>leetcode-problem-rating.enableStatusBar</font>        | 指定是否在 VS Code 下方显示插件状态栏。 <font color=red>增加周赛分数据</font>                                                                                                                                                                                                                                                                                                                                 | `true`                                                           |
-| <font color=red>leetcode-problem-rating.editor.shortcuts</font>       | 指定在编辑器内所自定义的快捷方式。可用的快捷方式有: `submit`, `test`, `star`, `solution`, `description`, <font color=red>case</font>, <font color=red>allcase</font> 。                                                                                                                                                                                                                                       | <font color=red>["submit, case, allcase, test, solution"]</font> |
-| <font color=red>leetcode-problem-rating.enableSideMode</font>         | 指定在解决一道题时，是否将`问题预览`、`高票答案`与`提交结果`窗口集中在编辑器的第二栏。                                                                                                                                                                                                                                                                                                                        | `true`                                                           |
-| <font color=red>leetcode-problem-rating.nodePath</font>               | 指定 `Node.js` 可执行文件的路径。如：C:\Program Files\nodejs\node.exe                                                                                                                                                                                                                                                                                                                                         | `node`                                                           |
-| <font color=red>leetcode-problem-rating.showCommentDescription</font> | 指定是否要在注释中显示题干。                                                                                                                                                                                                                                                                                                                                                                                  | `false`                                                          |
-| <font color=red>leetcode-problem-rating.useEndpointTranslation</font> | 是否显示翻译版本内容。                                                                                                                                                                                                                                                                                                                                                                                        | `true`                                                           |
-| <font color=red>leetcode-problem-rating.sortStrategy</font>           | 排序的选项。<font color=red>Acceptance Rate (Ascending):通过率递增 Acceptance Rate (Descending):通过率递减 Score (Ascending):分数递增 Score (Descending):分数递减</font>                                                                                                                                                                                                                                      | <font color=red>None</font>                                      |
-| <font color=red>leetcode-problem-rating.pickOneByRankRangeMin</font>  | 随机一题的最小浮动,随机一题最低分(你的竞赛分+本配置)。                                                                                                                                                                                                                                                                                                                                                        | <font color=red>50</font>                                        |
-| <font color=red>leetcode-problem-rating.pickOneByRankRangeMax</font>  | 随机一题的最大浮动,随机一题最高分(你的竞赛分+本配置)。                                                                                                                                                                                                                                                                                                                                                        | <font color=red>150</font>                                       |
-| <font color=red>leetcode-problem-rating.hideScore</font>              | 隐藏分数相关的题目。Score:隐藏有分数的题目, NoScore:隐藏没有分数的题目, ScoreRange:隐藏分数范围外的题目                                                                                                                                                                                                                                                                                                       | <font color=red>None</font>                                      |
-| <font color=red>leetcode-problem-rating.useVscodeNode</font>          | 默认情况下使用 VsCode 自带 Node 环境,不需要额外安装 Node 环境                                                                                                                                                                                                                                                                                                                                                 | <font color=red>true</font>                                      |
-| <font color=red>leetcode-problem-rating.answerDiffColor</font>        | 答案不同的地方上色                                                                                                                                                                                                                                                                                                                                                                                            | <font color=red>false</font>                                     |
+这也是为什么开关默认关闭：日常使用先保证本地调试稳定，AI 能力逐步迭代。
+
+### 7. 题单、评分和练习管理
+
+LeetcodeUltra 保留并增强了原项目的题单能力，适合按难度、标签、分数和复习节奏组织刷题。
+
+- 支持 LeetCode 中文站。
+- 支持题目评分数据。
+- 支持每日一题、精选分类、剑指 Offer、面试金典等分组。
+- 支持收藏、随机一题、按分数范围选题。
+- 支持搬砖 / 重复练习数据，刷过的题可以按间隔再练。
+- 支持本地 remark 备注。
+
+## 推荐工作流
+
+1. 在左侧题单中选择题目。
+2. 在中间编辑器写代码，右侧题目助手查看题面和示例。
+3. 在底部控制台管理多个测试用例。
+4. 单独运行失败用例，必要时点击该用例的调试按钮。
+5. 通过后提交，查看运行时间和内存分布。
+6. 在提交记录里为关键版本写备注，方便之后复盘。
+
+## 与原始插件的关系
+
+LeetcodeUltra 是基于 MIT 协议的 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 派生增强版本，并使用独立扩展身份发布。
+
+本项目保留原始 MIT 许可证与上游归属，同时在 UI、控制台、提交记录、性能展示、右侧助手和 C++ 调试体验上做了较大幅度的产品化改造。
+
+- 当前项目：https://github.com/Paradox-W/LeetcodeUltra
+- 上游项目：https://github.com/ccagml/leetcode-extension
+- 许可证：[MIT](./LICENSE)
+- 归属说明：[NOTICE.md](./NOTICE.md)
+
+## 运行要求
+
+- VS Code 1.57.0+
+- 建议使用 LeetCode 中文站账号。
+- C++ 本地调试建议安装 CodeLLDB 与 LeetCode Debugger for C++。
+
+## 常用配置
+
+```json
+{
+  "leetcode-problem-rating.endpoint": "leetcode.cn",
+  "leetcode-problem-rating.useEndpointTranslation": true,
+  "leetcode-problem-rating.useVscodeNode": true,
+  "leetcode-problem-rating.showCommentDescription": false,
+  "leetcode-problem-rating.workspaceFolder": "/path/to/leetcode",
+  "leetcode-problem-rating.defaultLanguage": "cpp"
+}
+```
+
+## 数据位置
+
+LeetcodeUltra 会在刷题工作区保存本地数据：
+
+```text
+<workspace>/.lcpr_data/
+  bricks.json
+  group.json
+  remark/
+  submission-notes/
+```
+
+这些数据用于重复练习、题目分组、备注和提交记录备注。
 
 ## 更新日志
 
-请参考[更新日志](CHANGELOG.md)
-
-## 鸣谢
-
-- 本插件基于[LeetCode-OpenSource](https://github.com/LeetCode-OpenSource)的[vscode-leetcode](https://github.com/LeetCode-OpenSource/vscode-leetcode/)
-- 题目分数数据基于[zerotrac](https://github.com/zerotrac)的[leetcode_problem_rating](https://github.com/zerotrac/leetcode_problem_rating/)每周的更新
-- 插件 debug 参考[wangtao0101](https://github.com/wangtao0101/vscode-debug-leetcode)
-- 插件 使用谷歌浏览器复制为 cUrl 方式登录 参考[StevenJohnston](https://github.com/StevenJohnston/leetcode-cli)
-
-<!-- ## 编译插件的相关信息
-
-### 系统信息
-
-```
-PRETTY_NAME="Ubuntu 22.04 LTS"
-NAME="Ubuntu"
-VERSION_ID="22.04"
-VERSION="22.04 (Jammy Jellyfish)"
-VERSION_CODENAME=jammy
-ID=ubuntu
-ID_LIKE=debian
-HOME_URL="https://www.ubuntu.com/"
-SUPPORT_URL="https://help.ubuntu.com/"
-BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
-PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
-UBUNTU_CODENAME=jammy
-```
-
-### node 版本
-
-```
-    v16.17.0
-```
-
-### npm 版本
-
-```
-    8.15.0
-```
-
-### 更新指令
-
-```
-sudo npm cache clean -f
-sudo npm install -g n
-sudo n stable
-```
-
-### 安装 node 依赖
-
-```
-    npm install
-```
-
-### 编译 ts 生成 js
-
-```
-    sudo apt install node-typescript
-    tsc
-```
-
-### 打包生成 vscode 插件
-
-#### 安装 vsce
-
-```
-    sudo npm i vsce -g
-```
-
-#### 执行打包
-
-```
-    vsce package
-```
-
--->
+请参考 [CHANGELOG.md](./CHANGELOG.md)。

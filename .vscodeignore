@@ -12,6 +12,9 @@ tslint.json
 ACKNOWLEDGEMENTS.md
 docs
 .github
+.lcpr_data/**
+garden-gpt-image-2/**
+**/.DS_Store
 c.sh
 delete.sh
 init_env.sh

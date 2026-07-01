@@ -61,6 +61,8 @@ typings/
 out
 *.vsix
 .vscode-test
+.lcpr_data/
+garden-gpt-image-2/
 
 # Mac
 .DS_Store

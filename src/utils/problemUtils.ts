@@ -45,6 +45,22 @@ export const extensionState: IExtensionState = {
   cachePath: "",
 };
 
+export function getExtensionPath(): string {
+  const contextPath = extensionState.context && extensionState.context.extensionPath;
+  if (contextPath) {
+    return contextPath;
+  }
+  const currentExtension = vscode.extensions.getExtension("paradox.leetcodeultra");
+  if (currentExtension) {
+    return currentExtension.extensionPath;
+  }
+  const legacyExtension = vscode.extensions.getExtension("ccagml.vscode-leetcode-problem-rating");
+  if (legacyExtension) {
+    return legacyExtension.extensionPath;
+  }
+  throw new Error("无法定位 LeetcodeUltra 扩展目录。");
+}
+
 export const languages: string[] = [
   "bash",
   "c",
@@ -153,7 +169,7 @@ export async function getProblemSpecialCode(
 }
 
 export async function getEntryFile(language: string, problem: string): Promise<string> {
-  const extDir: string = vscode.extensions.getExtension("ccagml.vscode-leetcode-problem-rating")!.extensionPath;
+  const extDir: string = getExtensionPath();
   const fileExt: string = genFileExt(language);
   const specialCode: string = await getProblemSpecialCode(language, problem, fileExt, extDir);
   const tmpEntryCode: string = (

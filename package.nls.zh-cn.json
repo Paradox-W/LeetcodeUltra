@@ -42,6 +42,16 @@
     "main.contributes.commands.lcpr.removeQidFromGroup.title": "从分类中移除这个题目",
     "main.contributes.commands.lcpr.includeTemplates.title": "插入头文件模板",
     "main.contributes.commands.lcpr.simpleDebug.title": "简单调试",
+    "main.contributes.commands.lcpr.aiDebug.analyzeAndShow.title": "AI 调试：分析并显示关键变量",
+    "main.contributes.commands.leetcodeEnhanced.analyzeAndShow.title": "AI 调试：分析并显示关键变量",
+    "main.contributes.commands.leetcodeEnhanced.showKeyVariables.title": "AI 调试：显示关键变量",
+    "main.contributes.commands.lcpr.aiDebug.refresh.title": "AI 调试：刷新变量",
+    "main.contributes.commands.lcpr.aiDebug.collect.title": "AI 调试：采集变量 JSON",
+    "main.contributes.commands.lcpr.aiDebug.setApiKey.title": "AI 调试：设置 API Key",
+    "main.contributes.commands.lcpr.aiDebug.toggleAiAnalysis.title": "AI 调试：切换自动分析",
+    "main.contributes.commands.lcpr.aiDebug.setManualVariables.title": "AI 调试：设置手动变量",
+    "main.contributes.commands.lcpr.aiDebug.setMaxVariables.title": "AI 调试：设置变量数量",
+    "main.contributes.commands.lcpr.aiDebug.setVisualTheme.title": "AI 调试：设置可视化主题",
     "main.contributes.viewsContainers.activitybar.lcpr_bar.title": "LCPR",
     "main.contributes.views.lcpr_bar.QuestionExplorer.name": "题目列表",
     "main.contributes.views.lcpr_bar.BricksExplorer.name": "搬砖工地",
@@ -76,6 +86,7 @@
     "main.contributes.configuration.properties.leetcode-problem-rating.filePath.description": "用于保存问题文件的输出文件夹和文件名。",
     "main.contributes.configuration.properties.leetcode-problem-rating.enableStatusBar.description": "是否显示状态栏。",
     "main.contributes.configuration.properties.leetcode-problem-rating.enableTimerBar.description": "是否显示计时器。",
+    "main.contributes.configuration.properties.leetcode-problem-rating.editor.bricksNextDay.description": "搬砖复习的天数间隔配置。",
     "main.contributes.configuration.properties.leetcode-problem-rating.editor.shortcuts.description": "自定义编辑器中的快捷方式。",
     "main.contributes.configuration.properties.leetcode-problem-rating.editor.shortcuts.items.enumDescriptions": [
         "提交题解",
@@ -128,5 +139,5 @@
     "main.contributes.configuration.properties.leetcode-problem-rating.hideScore.enumDescriptions.3": "隐藏分数在配置[pickOneByRankRangeMin, pickOneByRankRangeMax]范围外的题目",
     "main.contributes.configuration.properties.leetcode-problem-rating.cppCompiler.enumDescriptions.0": "gdb编译",
     "main.contributes.configuration.properties.leetcode-problem-rating.cppCompiler.enumDescriptions.1": "clang编译",
-    "main.contributes.configuration.properties.leetcode-problem-rating.cppCompiler.enumDescriptions.2": "msvc编译",
+    "main.contributes.configuration.properties.leetcode-problem-rating.cppCompiler.enumDescriptions.2": "msvc编译"
 }

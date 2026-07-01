@@ -35,6 +35,7 @@ import { registerLeetCodeWorkbench } from "./workbench/LeetCodeWorkbenchModule";
 import { registerLeetCodeCompanion } from "./companion/CompanionModule";
 import { registerLeetCodeFolding } from "./workbench/LeetCodeFoldingModule";
 import { registerProblemListDisplayOptions } from "./workbench/ProblemListDisplayModule";
+import { registerAiDebug } from "./aiDebug/AiDebugModule";
 
 //==================================BABA========================================
 
@@ -93,6 +94,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
       registerLeetCodeCompanion(context),
       registerLeetCodeFolding(context),
       registerProblemListDisplayOptions(context, treeDataService),
+      registerAiDebug(context),
       window.registerFileDecorationProvider(treeColor),
       window.createTreeView("QuestionExplorer", { treeDataProvider: treeDataService, showCollapseAll: true }),
       window.createTreeView("BricksExplorer", { treeDataProvider: bricksDataService, showCollapseAll: true }),
@@ -228,8 +230,8 @@ export async function activate(context: ExtensionContext): Promise<void> {
       commands.registerCommand("lcpr.includeTemplates", (document: TextDocument) => {
         BABA.sendNotification(BabaStr.BABACMD_includeTemplates, document);
       }),
-      commands.registerCommand("lcpr.simpleDebug", (document: TextDocument, testCase?) =>
-        BABA.sendNotification(BabaStr.BABACMD_simpleDebug, { document: document, testCase: testCase })
+      commands.registerCommand("lcpr.simpleDebug", (document: TextDocument, testCase?, enableAiDebug?) =>
+        BABA.sendNotificationAsync(BabaStr.BABACMD_simpleDebug, { document: document, testCase: testCase, enableAiDebug: !!enableAiDebug })
       ),
       commands.registerCommand("lcpr.addDebugType", (document: TextDocument, addType) =>
         BABA.sendNotification(BabaStr.BABACMD_addDebugType, { document: document, addType: addType })

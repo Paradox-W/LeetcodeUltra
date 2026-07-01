@@ -467,41 +467,6 @@ body .submission-code code.hljs .hljs-strong {
         }
         this.revealAndRender(true);
     }
-    async openSubmissionFilter(kind) {
-        this.sanitizeSubmissionFilters();
-        const filterKind = String(kind || "");
-        const filters = Object.assign({ status: "all", lang: "all" }, this.state.submissions.filters || {});
-        const list = this.state.submissions.list || [];
-        let items = [];
-        let placeHolder = "";
-        if (filterKind === "status") {
-            items = [
-                { label: "全部状态", value: "all" },
-                { label: "通过", value: "accepted" },
-                { label: "未通过", value: "failed" },
-            ];
-            placeHolder = "筛选提交状态";
-        }
-        else if (filterKind === "lang") {
-            const langs = [...new Set(list.map((item) => String(item.lang || "").trim()).filter(Boolean))];
-            items = [{ label: "全部语言", value: "all" }].concat(langs.map((lang) => ({ label: lang, value: lang })));
-            placeHolder = "筛选语言";
-        }
-        if (!items.length) {
-            return;
-        }
-        const currentValue = filters[filterKind] || "all";
-        const picked = await vscode.window.showQuickPick(items.map((item) => ({
-            label: item.value === currentValue ? `$(check) ${item.label}` : item.label,
-            description: item.value === currentValue ? "当前" : undefined,
-            value: item.value,
-        })), { placeHolder, matchOnDescription: true });
-        if (!picked) {
-            return;
-        }
-        this.state.submissions.filters = Object.assign({}, filters, { [filterKind]: picked.value });
-        this.revealAndRender(true);
-    }
     dispose() {
         this.view = undefined;
     }
@@ -532,9 +497,6 @@ body .submission-code code.hljs .hljs-strong {
             case "filterSubmissions":
                 this.state.submissions.filters = Object.assign({}, this.state.submissions.filters, message.filters || {});
                 this.revealAndRender(true);
-                break;
-            case "openSubmissionFilter":
-                this.openSubmissionFilter(message.kind);
                 break;
             case "selectSubmission":
                 this.loadSubmissionDetail(message.id);
@@ -628,8 +590,18 @@ body .submission-code code.hljs .hljs-strong {
     }
     let noteSearchComposing = false;
     applySubmissionNoteSearch();
+    function closeSubmissionFilters(except) {
+      document.querySelectorAll('[data-filter-root].open').forEach((root) => {
+        if (except && root === except) return;
+        root.classList.remove('open');
+        const button = root.querySelector('[data-filter-toggle]');
+        if (button) button.setAttribute('aria-expanded', 'false');
+      });
+    }
     document.addEventListener('click', (event) => {
-      const toggle = event.target.closest('[data-toggle-code]');
+      const clicked = event.target && event.target.closest ? event.target : event.target && event.target.parentElement;
+      if (!clicked || !clicked.closest) return;
+      const toggle = clicked.closest('[data-toggle-code]');
       if (toggle) {
         const code = document.querySelector('[data-submission-code]');
         if (code) {
@@ -638,8 +610,30 @@ body .submission-code code.hljs .hljs-strong {
         }
         return;
       }
-      const target = event.target.closest('[data-command]');
-      if (!target) return;
+      const filterToggle = clicked.closest('[data-filter-toggle]');
+      if (filterToggle) {
+        const root = filterToggle.closest('[data-filter-root]');
+        const willOpen = root && !root.classList.contains('open');
+        closeSubmissionFilters(root);
+        if (root) {
+          root.classList.toggle('open', willOpen);
+          filterToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        }
+        return;
+      }
+      const filterOption = clicked.closest('[data-filter-value]');
+      if (filterOption) {
+        const kind = filterOption.getAttribute('data-filter-kind');
+        const value = filterOption.getAttribute('data-filter-value');
+        closeSubmissionFilters();
+        vscode.postMessage({ command: 'filterSubmissions', filters: { [kind]: value } });
+        return;
+      }
+      const target = clicked.closest('[data-command]');
+      if (!target) {
+        closeSubmissionFilters();
+        return;
+      }
       const command = target.getAttribute('data-command');
       if (command === 'selectSubmission') {
         vscode.postMessage({ command, id: target.getAttribute('data-id') });
@@ -649,10 +643,13 @@ body .submission-code code.hljs .hljs-strong {
       } else if (command === 'copySubmissionCode') {
         const code = document.querySelector('[data-submission-code]');
         vscode.postMessage({ command, code: code ? code.textContent : '' });
-      } else if (command === 'openSubmissionFilter') {
-        vscode.postMessage({ command, kind: target.getAttribute('data-kind') });
       } else {
         vscode.postMessage({ command });
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeSubmissionFilters();
       }
     });
     function autosizeSubmissionNote(textarea) {
@@ -844,6 +841,12 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
         const filtered = this.filteredSubmissions();
         const statusValue = (submissions.filters && submissions.filters.status) || "all";
         const langValue = (submissions.filters && submissions.filters.lang) || "all";
+        const statusItems = [
+            { label: "全部状态", value: "all" },
+            { label: "通过", value: "accepted" },
+            { label: "错误", value: "failed" },
+        ];
+        const langItems = [{ label: "全部语言", value: "all" }].concat([...new Set(list.map((item) => String(item.lang || "").trim()).filter(Boolean))].map((lang) => ({ label: lang, value: lang })));
         return `<section class="submission-list-view">
   <div class="submission-titlebar">
     <div>
@@ -856,22 +859,51 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
     </div>
   </div>
   <div class="submission-toolbar">
-    ${this.renderSubmissionFilterButton("status", this.statusFilterText(statusValue))}
-    ${this.renderSubmissionFilterButton("lang", this.langFilterText(langValue))}
+    ${this.renderSubmissionStatusSegments(statusValue, statusItems)}
+    ${this.renderSubmissionLanguageFilter(langValue, langItems)}
   </div>
   <label class="submission-note-search">
     <span>备注搜索</span>
-    <input type="text" role="searchbox" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="模糊搜索备注" data-submission-note-search>
+    <input type="text" role="searchbox" autocomplete="off" autocorrect="off" spellcheck="false" data-submission-note-search>
   </label>
   ${filtered.length ? `<div class="submission-rows" data-submission-rows>${filtered.map((item, index) => this.renderSubmissionRow(item, index)).join("")}</div><div class="lcpr-empty compact submission-search-empty" data-submission-note-empty hidden><div class="lcpr-empty-title">没有匹配的备注</div><p>换一个关键词试试。</p></div>` : `<div class="lcpr-empty compact"><div class="lcpr-empty-title">暂无提交</div><p>当前筛选条件下没有提交记录。</p></div>`}
 </section>`;
     }
-    renderSubmissionFilterButton(kind, label) {
-        const text = String(label || "");
-        return `<button class="submission-filter-button" data-command="openSubmissionFilter" data-kind="${this.escapeAttr(kind)}">
-  <span>${this.escapeHtml(text)}</span>
-  <span class="submission-filter-chevron">⌄</span>
+    renderSubmissionStatusSegments(currentValue, items) {
+        const current = String(currentValue || "all");
+        const labels = {
+            all: "全部",
+            accepted: "通过",
+            failed: "错误",
+        };
+        const buttons = (items || []).map((item) => {
+            const value = String(item.value || "");
+            const selected = value === current;
+            return `<button class="submission-status-segment${selected ? " current" : ""}" type="button" aria-pressed="${selected ? "true" : "false"}" data-filter-kind="status" data-filter-value="${this.escapeAttr(value)}">${this.escapeHtml(labels[value] || item.label || value)}</button>`;
+        }).join("");
+        return `<div class="submission-status-segments" role="group" aria-label="提交状态筛选">${buttons}</div>`;
+    }
+    renderSubmissionLanguageFilter(currentValue, items) {
+        const current = String(currentValue || "all");
+        const text = this.langFilterText(current);
+        const options = (items || []).map((item) => {
+            const value = String(item.value || "");
+            const selected = value === current;
+            return `<button class="submission-filter-option${selected ? " current" : ""}" type="button" role="option" aria-selected="${selected ? "true" : "false"}" data-filter-kind="lang" data-filter-value="${this.escapeAttr(value)}">
+  <span class="submission-filter-check">${selected ? "✓" : ""}</span>
+  <span>${this.escapeHtml(item.label || value)}</span>
 </button>`;
+        }).join("");
+        return `<div class="submission-filter" data-filter-root data-kind="lang">
+  <button class="submission-filter-button" type="button" data-filter-toggle aria-haspopup="listbox" aria-expanded="false">
+    <span class="submission-filter-label">语言</span>
+    <span class="submission-filter-value">${this.escapeHtml(text)}</span>
+    <span class="submission-filter-mark" aria-hidden="true"><span></span><span></span></span>
+  </button>
+  <div class="submission-filter-menu" role="listbox">
+    ${options}
+  </div>
+</div>`;
     }
     renderSubmissionMetricIcon(kind) {
         if (kind === "memory") {
@@ -1394,7 +1426,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
             return "通过";
         }
         if (value === "failed") {
-            return "未通过";
+            return "错误";
         }
         return "全部状态";
     }
@@ -1865,24 +1897,69 @@ h1 a:hover, h1 a:focus, h1 a:active {
   line-height: 1.2;
 }
 .submission-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
-}
-.submission-filter-button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+  overflow: visible;
+}
+.submission-status-segments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--lcpr-border);
+  border-radius: 4px;
+  background: var(--lcpr-input);
+}
+.submission-status-segment {
+  min-width: 0;
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lcpr-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.submission-status-segment:hover {
+  color: var(--lcpr-fg);
+  background: var(--lcpr-hover);
+}
+.submission-status-segment.current {
+  color: var(--lcpr-fg);
+  background: var(--vscode-button-secondaryBackground, var(--lcpr-bg));
+  box-shadow: inset 0 0 0 1px var(--lcpr-border);
+}
+.submission-filter {
+  position: relative;
+  flex: 0 1 138px;
+  min-width: 0;
+}
+.submission-filter-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
   width: 100%;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--vscode-input-border, var(--lcpr-border));
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--lcpr-border);
   border-radius: 4px;
   background: var(--lcpr-input);
   color: var(--lcpr-fg);
   font: inherit;
-  font-size: 14px;
+  font-size: 12px;
   cursor: pointer;
 }
 .submission-filter-button:hover {
@@ -1890,6 +1967,10 @@ h1 a:hover, h1 a:focus, h1 a:active {
 }
 .submission-filter-button:focus,
 .submission-filter-button:focus-visible,
+.submission-status-segment:focus,
+.submission-status-segment:focus-visible,
+.submission-filter-option:focus,
+.submission-filter-option:focus-visible,
 .submission-row:focus,
 .submission-row:focus-visible,
 .lcpr-submissions .lcpr-plain-button:focus,
@@ -1897,17 +1978,98 @@ h1 a:hover, h1 a:focus, h1 a:active {
   outline: none;
   box-shadow: none;
 }
-.submission-filter-button span:first-child {
+.submission-filter.open .submission-filter-button {
+  border-color: var(--vscode-focusBorder, var(--lcpr-border));
+  background: var(--lcpr-hover);
+}
+.submission-filter-label {
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.submission-filter-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: right;
+  font-weight: 600;
 }
-.submission-filter-chevron {
+.submission-filter-mark {
   flex: 0 0 auto;
-  color: var(--lcpr-muted);
-  font-size: 18px;
-  line-height: 1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  width: 12px;
+  height: 12px;
+  opacity: .72;
+}
+.submission-filter-mark span {
+  display: block;
+  width: 8px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: var(--lcpr-muted);
+}
+.submission-filter.open .submission-filter-mark {
+  opacity: 1;
+}
+.submission-filter-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 10;
+  display: none;
+  min-width: 136px;
+  width: 100%;
+  max-height: 210px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--lcpr-border);
+  border-radius: 4px;
+  background: var(--vscode-dropdown-background, var(--lcpr-bg));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .16);
+}
+.submission-filter.open .submission-filter-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.submission-filter-option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--lcpr-fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.submission-filter-option:hover {
+  background: var(--lcpr-hover);
+}
+.submission-filter-option.current {
+  color: var(--vscode-list-activeSelectionForeground, var(--vscode-button-foreground));
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-button-background));
+}
+.submission-filter-check {
+  color: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+.submission-filter-option span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .submission-note-search {
   display: grid;
@@ -1936,6 +2098,7 @@ h1 a:hover, h1 a:focus, h1 a:active {
   outline: none;
   font: inherit;
   font-size: 13px;
+  text-align: right;
 }
 .submission-note-search input::placeholder {
   color: var(--vscode-input-placeholderForeground, var(--lcpr-muted));

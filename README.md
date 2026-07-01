@@ -27,6 +27,7 @@ Upstream project: https://github.com/ccagml/leetcode-extension
 - [新增题目自定义分类](#新增在工作目录存放数据)
 - [答案不同上色,配置默认不开启](#插件配置项)
 - 增加获取中文站的题解
+- [增加 C++ 调试与可选 AI 调试](#c-调试与-ai-调试)
 - 增加 cpp、js、py3 一些题目的 debug(参考 wangtao0101 项目,有问题提 issues)
 - [有些题目原插件无法调试,请尝试配置区域调试参数](#区域调试参数的一些说明)
 - [国际站修改登录方式 cRUL 方式登录](#cRUL 登录)
@@ -78,6 +79,16 @@ Upstream project: https://github.com/ccagml/leetcode-extension
 ### 一键提交的用例去重
 
 - 简单的比较这些用例字符串是否相同
+
+## C++ 调试与 AI 调试
+
+- 控制台每个测试用例右侧提供调试按钮，C++ 调试优先复用
+  [LeetCode Debugger for C++](https://github.com/xavier-cai/vscode-leetcode-cpp-debug)
+  生成的 wrapper，并通过 CodeLLDB 启动本地调试会话。
+- 控制台工具栏提供 `开启 AI 调试` 复选项。默认关闭时只启动普通 C++ 调试，不打开 AI 面板；勾选后才会在调试会话启动后打开 AI 调试视图并采集变量。
+- 建议同时安装 `xaviercai.vscode-leetcode-cpp-debug` 与 `vadimcn.vscode-lldb`。工作区可将
+  `leetcode-cpp-debugger.source` 设置为 `[offline]local`。
+- 调试输入来自当前控制台测试用例，扩展会写入同目录 `test_case.txt`，避免手动在终端重复输入。
 
 ## 状态栏增加简易计时器
 

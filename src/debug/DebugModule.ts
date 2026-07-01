@@ -14,6 +14,7 @@ import * as fse from "fs-extra";
 
 import { getTextEditorFilePathByUri } from "../utils/SystemUtils";
 import * as fs from "fs";
+import { cppLeetCodePluginBridge } from "./CppLeetCodePluginBridge";
 import { DebugCpp } from "./DoCpp";
 import { DebugPy3 } from "./DoPy3";
 import { DebugJs } from "./DoJs";
@@ -352,29 +353,19 @@ class DebugService {
       const lineContent: string = document.lineAt(i).text;
 
       if (lineContent.indexOf("@lc code=end") >= 0) {
-        const editor = vscode.window.activeTextEditor;
-
-        await new Promise(async (resolve, _) => {
-          editor
-            ?.edit((edit) => {
-              edit.insert(new vscode.Position(i + 1, i + 1), div_debug_arg.join("\n"));
-            })
-            .then((success) => {
-              if (success) {
-                editor.document.save().then(() => {
-                  resolve(1);
-                });
-              } else {
-                resolve(1);
-              }
-            });
-        });
+        const edit = new vscode.WorkspaceEdit();
+        edit.insert(document.uri, new vscode.Position(i + 1, 0), div_debug_arg.join("\n"));
+        const success = await vscode.workspace.applyEdit(edit);
+        if (success) {
+          const updatedDocument = await vscode.workspace.openTextDocument(document.uri);
+          await updatedDocument.save();
+        }
         break;
       }
     }
   }
 
-  public async checkCanDebug(document: vscode.TextDocument, testcase?: string) {
+  public async checkCanDebug(document: vscode.TextDocument, testcase?: string, options: { enableAiDebug?: boolean } = {}) {
     try {
       let filePath: string | undefined = await getTextEditorFilePathByUri(document.uri);
       if (!filePath) {
@@ -383,6 +374,32 @@ class DebugService {
       const fileContent: Buffer = fs.readFileSync(filePath);
       let meta: ProblemMeta | null = fileMeta(fileContent.toString());
 
+      if (meta == undefined) {
+        ShowMessage("无法识别当前力扣题目文件，缺少 @lc 元信息。", OutPutType.error);
+        return;
+      }
+
+      if (meta.lang === "cpp") {
+        if (testcase == undefined) {
+          const ts_temp: string | undefined = await vscode.window.showInputBox({
+            prompt: "输入用于 C++ 调试的测试用例。",
+            validateInput: (s: string): string | undefined =>
+              s && s.trim() ? undefined : "测试用例不能为空。",
+            placeHolder: "例如：[1,2,3]\\n4",
+            ignoreFocusOut: true,
+          });
+          testcase = ts_temp;
+
+          if (testcase == undefined) {
+            ShowMessage("没有提供测试用例，已取消调试。", OutPutType.warning);
+            return;
+          }
+        }
+
+        await cppLeetCodePluginBridge.start(document, filePath, testcase, { enableAiDebug: !!options.enableAiDebug });
+        return;
+      }
+
       if (!this.canDebug(meta, document)) {
         // 判断生成测试区块
         await this.check_create_debug_area(meta, document);
@@ -390,10 +407,12 @@ class DebugService {
         try {
           document = await vscode.workspace.openTextDocument(document.uri);
         } catch (error) {
+          ShowMessage(`打开题目文件失败，无法调试：${(error as Error).message || error}`, OutPutType.error);
           return;
         }
 
         if (!this.canDebug(meta, document)) {
+          ShowMessage("调试参数区未生成或不完整，无法开始调试。", OutPutType.error);
           return;
         }
         meta = fileMeta(document.getText());
@@ -409,16 +428,22 @@ class DebugService {
         testcase = ts_temp;
 
         if (testcase == undefined) {
+          ShowMessage("没有提供测试用例，已取消调试。", OutPutType.warning);
           return;
         }
       }
 
-      if (meta == undefined) {
-        return;
-      }
-
       await this.execute(document, filePath, testcase.replace(/"/g, '\\"'), meta!.lang);
-    } catch (error) {}
+    } catch (error) {
+      const message = (error as Error).message || String(error);
+      ShowMessage(`启动调试失败：${message}`, OutPutType.error);
+      try {
+        BABA.getProxy(BabaStr.LogOutputProxy).get_log().appendLine((error as Error).stack || message);
+        BABA.getProxy(BabaStr.LogOutputProxy).get_log().show();
+      } catch (_) {
+        // If output initialization is unavailable, the visible error message above is still useful.
+      }
+    }
   }
 }
 
@@ -452,7 +477,7 @@ export class DebugMediator extends BABAMediator {
       case BabaStr.VSCODE_DISPOST:
         break;
       case BabaStr.BABACMD_simpleDebug:
-        debugService.checkCanDebug(body.document, body.testCase);
+        await debugService.checkCanDebug(body.document, body.testCase, { enableAiDebug: !!body.enableAiDebug });
         break;
       case BabaStr.BABACMD_addDebugType:
         debugService.addDebugType(body.document, body.addType);

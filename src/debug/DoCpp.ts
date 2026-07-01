@@ -7,6 +7,7 @@ import {
   fileMeta,
   getEntryFile,
   getProblemSpecialCode,
+  getExtensionPath,
   randomString,
   extensionState,
   IDebugConfig,
@@ -37,6 +38,8 @@ function getGdbDefaultConfig(): IDebugConfig {
 function getClangDefaultConfig(): IDebugConfig {
   return {
     type: "lldb",
+    terminal: "console",
+    stopOnEntry: true,
   };
 }
 
@@ -61,6 +64,35 @@ function getTemplateId(id: string): string {
 
 export class DebugCpp {
   static DEBUG_LANG = "cpp";
+  private stripLeetCodeTemplateBlock(source: string): string {
+    return String(source || "").replace(
+      /^\s*\/\/\s*@lcpr-template-start[\s\S]*?^\s*\/\/\s*@lcpr-template-end\s*\r?\n?/gm,
+      (block: string) => block.replace(/[^\r\n]/g, "")
+    );
+  }
+
+  private removeGeneratedBreakpoints(newSourceFilePath: string): void {
+    const generatedBreakpoints = vscode.debug.breakpoints.filter((bp: vscode.Breakpoint) => {
+      return bp instanceof vscode.SourceBreakpoint && bp.location.uri.fsPath === newSourceFilePath;
+    });
+    if (generatedBreakpoints.length) {
+      vscode.debug.removeBreakpoints(generatedBreakpoints);
+    }
+  }
+
+  private mirrorUserBreakpoints(filePath: string, newSourceFilePath: string): void {
+    const sourceUri = vscode.Uri.file(newSourceFilePath);
+    const mirrored = vscode.debug.breakpoints
+      .filter((bp: vscode.Breakpoint) => bp instanceof vscode.SourceBreakpoint && bp.location.uri.fsPath === filePath)
+      .map((bp: vscode.SourceBreakpoint) => {
+        const location: vscode.Location = new vscode.Location(sourceUri, bp.location.range);
+        return new vscode.SourceBreakpoint(location, bp.enabled, bp.condition, bp.hitCondition, bp.logMessage);
+      });
+    if (mirrored.length) {
+      vscode.debug.addBreakpoints(mirrored);
+    }
+  }
+
   public async execute(
     document: vscode.TextDocument,
     filePath: string,
@@ -69,6 +101,7 @@ export class DebugCpp {
     port: number
   ): Promise<string | undefined> {
     const sourceFileContent: string = (await fse.readFile(filePath)).toString();
+    const debugSourceFileContent: string = this.stripLeetCodeTemplateBlock(sourceFileContent);
     const meta: { id: string; lang: string } | null = fileMeta(sourceFileContent);
     if (meta == null) {
       ShowMessage(
@@ -96,12 +129,14 @@ export class DebugCpp {
     if (!moduleExportsReg.test(sourceFileContent)) {
       const newContent: string =
         `// @lcpr-before-debug-begin\n\n\n\n\n// @lcpr-before-debug-end\n\n` + sourceFileContent;
+      const newDebugContent: string =
+        `// @lcpr-before-debug-begin\n\n\n\n\n// @lcpr-before-debug-end\n\n` + debugSourceFileContent;
       await fse.writeFile(filePath, newContent);
 
       // create source file for build because g++ does not support inlucde file with chinese name
-      await fse.writeFile(newSourceFilePath, newContent);
+      await fse.writeFile(newSourceFilePath, newDebugContent);
     } else {
-      await fse.writeFile(newSourceFilePath, sourceFileContent);
+      await fse.writeFile(newSourceFilePath, debugSourceFileContent);
     }
 
     let params: string[] = testString.split("\\n");
@@ -212,7 +247,7 @@ export class DebugCpp {
       .replace(codeRegExp, insertCode);
     await fse.writeFile(entryFile, newEntryFileContent);
 
-    const extDir: string = vscode.extensions.getExtension("ccagml.vscode-leetcode-problem-rating")!.extensionPath;
+    const extDir: string = getExtensionPath();
 
     // copy common.h
     const commonHeaderPath: string = path.join(extDir, "resources/debug/entry/cpp/problems/common.h");
@@ -242,7 +277,14 @@ export class DebugCpp {
     const thirdPartyPath: string = path.join(extDir, "resources/debug/thirdparty/c");
     const jsonPath: string = path.join(extDir, "resources/debug/thirdparty/c/cJSON.c");
 
-    const compiler = vscode.workspace.getConfiguration("leetcode-problem-rating").get<string>("cppCompiler") ?? "gdb";
+    const config = vscode.workspace.getConfiguration("leetcode-problem-rating");
+    const inspectedCompiler = config.inspect<string>("cppCompiler");
+    const configuredCompiler = inspectedCompiler && (
+      inspectedCompiler.workspaceFolderValue ||
+      inspectedCompiler.workspaceValue ||
+      inspectedCompiler.globalValue
+    );
+    const compiler = configuredCompiler || (isWindows() ? "msvc" : "clang");
     let debugConfig: any;
       switch (compiler) {
         case "clang": {
@@ -301,6 +343,9 @@ export class DebugCpp {
       return;
     }
 
+    this.removeGeneratedBreakpoints(newSourceFilePath);
+    this.mirrorUserBreakpoints(filePath, newSourceFilePath);
+
     const debuging: boolean = await vscode.debug.startDebugging(
       undefined,
       Object.assign({}, debugConfig, {
@@ -313,21 +358,6 @@ export class DebugCpp {
 
     if (debuging) {
       const debugSessionDisposes: vscode.Disposable[] = [];
-
-      vscode.debug.breakpoints.map((bp: vscode.SourceBreakpoint) => {
-        if (bp.location.uri.fsPath === newSourceFilePath) {
-          vscode.debug.removeBreakpoints([bp]);
-        }
-      });
-
-      vscode.debug.breakpoints.map((bp: vscode.SourceBreakpoint) => {
-        if (bp.location.uri.fsPath === filePath) {
-          const location: vscode.Location = new vscode.Location(vscode.Uri.file(newSourceFilePath), bp.location.range);
-          vscode.debug.addBreakpoints([
-            new vscode.SourceBreakpoint(location, bp.enabled, bp.condition, bp.hitCondition, bp.logMessage),
-          ]);
-        }
-      });
 
       debugSessionDisposes.push(
         vscode.debug.onDidChangeBreakpoints((event: vscode.BreakpointsChangeEvent) => {
@@ -387,6 +417,7 @@ export class DebugCpp {
       debugSessionDisposes.push(
         vscode.debug.onDidTerminateDebugSession((event: vscode.DebugSession) => {
           if (event.name === debugSessionName) {
+            this.removeGeneratedBreakpoints(newSourceFilePath);
             debugSessionDisposes.map((d: vscode.Disposable) => d.dispose());
           }
         })
@@ -484,8 +515,8 @@ export class DebugCpp {
 
     debugConfig.program = exePath;
     debugConfig.cwd = extensionState.cachePath;
-    // map build source file to user source file
-    debugConfig.sourceFileMap = {
+    // CodeLLDB uses sourceMap instead of cpptools' sourceFileMap.
+    debugConfig.sourceMap = {
       [newSourceFilePath]: filePath,
     };
     return debugConfig;

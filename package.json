@@ -46,6 +46,16 @@
         "onCommand:lcpr.workbench.case",
         "onCommand:lcpr.workbench.allcase",
         "onCommand:lcpr.workbench.debug",
+        "onCommand:lcpr.aiDebug.analyzeAndShow",
+        "onCommand:leetcodeEnhanced.analyzeAndShow",
+        "onCommand:leetcodeEnhanced.showKeyVariables",
+        "onCommand:lcpr.aiDebug.refresh",
+        "onCommand:lcpr.aiDebug.collect",
+        "onCommand:lcpr.aiDebug.setApiKey",
+        "onCommand:lcpr.aiDebug.toggleAiAnalysis",
+        "onCommand:lcpr.aiDebug.setManualVariables",
+        "onCommand:lcpr.aiDebug.setMaxVariables",
+        "onCommand:lcpr.aiDebug.setVisualTheme",
         "onView:LCPRWorkbench",
         "onView:LCPRCompanionView"
     ],
@@ -300,6 +310,66 @@
                 "title": "调试当前用例",
                 "category": "LeetCode",
                 "icon": "$(debug-alt)"
+            },
+            {
+                "command": "lcpr.aiDebug.analyzeAndShow",
+                "title": "%main.contributes.commands.lcpr.aiDebug.analyzeAndShow.title%",
+                "category": "LeetCode",
+                "icon": "$(debug-alt)"
+            },
+            {
+                "command": "leetcodeEnhanced.analyzeAndShow",
+                "title": "%main.contributes.commands.leetcodeEnhanced.analyzeAndShow.title%",
+                "category": "LeetCode",
+                "icon": "$(debug-alt)"
+            },
+            {
+                "command": "leetcodeEnhanced.showKeyVariables",
+                "title": "%main.contributes.commands.leetcodeEnhanced.showKeyVariables.title%",
+                "category": "LeetCode",
+                "icon": "$(debug-alt)"
+            },
+            {
+                "command": "lcpr.aiDebug.refresh",
+                "title": "%main.contributes.commands.lcpr.aiDebug.refresh.title%",
+                "category": "LeetCode",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "lcpr.aiDebug.collect",
+                "title": "%main.contributes.commands.lcpr.aiDebug.collect.title%",
+                "category": "LeetCode",
+                "icon": "$(json)"
+            },
+            {
+                "command": "lcpr.aiDebug.setApiKey",
+                "title": "%main.contributes.commands.lcpr.aiDebug.setApiKey.title%",
+                "category": "LeetCode",
+                "icon": "$(key)"
+            },
+            {
+                "command": "lcpr.aiDebug.toggleAiAnalysis",
+                "title": "%main.contributes.commands.lcpr.aiDebug.toggleAiAnalysis.title%",
+                "category": "LeetCode",
+                "icon": "$(sparkle)"
+            },
+            {
+                "command": "lcpr.aiDebug.setManualVariables",
+                "title": "%main.contributes.commands.lcpr.aiDebug.setManualVariables.title%",
+                "category": "LeetCode",
+                "icon": "$(list-selection)"
+            },
+            {
+                "command": "lcpr.aiDebug.setMaxVariables",
+                "title": "%main.contributes.commands.lcpr.aiDebug.setMaxVariables.title%",
+                "category": "LeetCode",
+                "icon": "$(symbol-number)"
+            },
+            {
+                "command": "lcpr.aiDebug.setVisualTheme",
+                "title": "%main.contributes.commands.lcpr.aiDebug.setVisualTheme.title%",
+                "category": "LeetCode",
+                "icon": "$(color-mode)"
             }
         ],
         "viewsContainers": {
@@ -1303,6 +1373,122 @@
                             }
                         },
                         "description": "控制 LCPR 题目列表显示内容。"
+                    },
+                    "leetcode-problem-rating.aiDebug.enableAiAnalysis": {
+                        "type": "boolean",
+                        "default": true,
+                        "scope": "application",
+                        "description": "AI 调试时是否调用模型识别关键变量。关闭后仅使用本地静态分析。"
+                    },
+                    "leetcode-problem-rating.aiDebug.autoRefreshOnStop": {
+                        "type": "boolean",
+                        "default": true,
+                        "scope": "application",
+                        "description": "AI 调试面板打开时，调试器每次暂停后自动刷新变量。"
+                    },
+                    "leetcode-problem-rating.aiDebug.maxVariables": {
+                        "type": "number",
+                        "default": 6,
+                        "minimum": 1,
+                        "maximum": 12,
+                        "scope": "application",
+                        "description": "AI 调试一次最多监视的关键变量数量。"
+                    },
+                    "leetcode-problem-rating.aiDebug.childPageSize": {
+                        "type": "number",
+                        "default": 100,
+                        "minimum": 10,
+                        "maximum": 500,
+                        "scope": "application",
+                        "description": "AI 调试通过 DAP variables 请求一次最多读取的子变量数量。"
+                    },
+                    "leetcode-problem-rating.aiDebug.maxListNodes": {
+                        "type": "number",
+                        "default": 50,
+                        "minimum": 5,
+                        "maximum": 200,
+                        "scope": "application",
+                        "description": "AI 调试渲染链表时最多展开的节点数量。"
+                    },
+                    "leetcode-problem-rating.aiDebug.maxTreeNodes": {
+                        "type": "number",
+                        "default": 80,
+                        "minimum": 5,
+                        "maximum": 300,
+                        "scope": "application",
+                        "description": "AI 调试渲染树或图时最多展开的节点数量。"
+                    },
+                    "leetcode-problem-rating.aiDebug.manualVariables": {
+                        "type": "array",
+                        "default": [],
+                        "scope": "resource",
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "expression": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        "description": "AI 调试始终尝试监视的变量或表达式，例如 [\"nums\", {\"name\":\"head\",\"type\":\"ListNode\"}]。"
+                    },
+                    "leetcode-problem-rating.aiDebug.visualTheme": {
+                        "type": "string",
+                        "default": "native",
+                        "enum": [
+                            "native",
+                            "dense",
+                            "contrast"
+                        ],
+                        "enumDescriptions": [
+                            "跟随 VS Code 原生面板密度。",
+                            "更紧凑的变量卡片和间距。",
+                            "更明显的边框和层级，适合投屏或低对比主题。"
+                        ],
+                        "scope": "application",
+                        "description": "AI 调试 Webview 的可视化样式主题。"
+                    },
+                    "leetcode-problem-rating.aiDebug.baseUrl": {
+                        "type": "string",
+                        "default": "https://api.siliconflow.cn/v1",
+                        "scope": "application",
+                        "description": "AI 调试的 OpenAI 兼容 base URL。留空时会回退读取旧 aiVisualize 配置。"
+                    },
+                    "leetcode-problem-rating.aiDebug.model": {
+                        "type": "string",
+                        "default": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+                        "scope": "application",
+                        "description": "AI 调试使用的聊天模型。留空时会回退读取旧 aiVisualize 配置。"
+                    },
+                    "leetcode-problem-rating.aiDebug.api": {
+                        "type": "object",
+                        "default": {
+                            "baseUrl": "https://api.siliconflow.cn/v1",
+                            "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+                            "apiKey": "",
+                            "apiKeyEnv": "",
+                            "path": "",
+                            "temperature": 0.15,
+                            "maxTokens": 900,
+                            "jsonMode": true,
+                            "timeoutMs": 45000,
+                            "headers": {}
+                        },
+                        "scope": "application",
+                        "description": "AI 调试 OpenAI 兼容 API 的统一 JSON 配置；未配置字段会兼容回退到旧 aiVisualize.api。"
                     }
                 }
             }
@@ -1312,7 +1498,9 @@
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose"
+        "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
+        "test:ai-debug": "npm run compile && node scripts/ai-debug-smoke.js",
+        "test:ai-debug:extension": "npm run compile && node scripts/ai-debug-extension-test-runner.js"
     },
     "devDependencies": {
         "@types/fs-extra": "^9.0.11",
@@ -1322,11 +1510,11 @@
         "@types/vscode": "1.57.0",
         "@typescript-eslint/eslint-plugin": "^5.42.1",
         "@typescript-eslint/parser": "^5.43.0",
+        "@vscode/test-electron": "^3.0.0",
         "chai": "4.2.0",
         "eslint": "^8.27.0",
         "prettier": "^2.7.1",
-        "tslint": "^5.20.1",
-        "typescript": "^4.9.3"
+        "tslint": "^5.20.1"
     },
     "dependencies": {
         "ansi-styles": "3.2.1",
@@ -1344,6 +1532,7 @@
         "parse-curl": "^0.2.6",
         "prompt": "^1.2.0",
         "request": "2.88.0",
+        "typescript": "^4.9.3",
         "underscore": "1.12.1",
         "wordwrap": "1.0.0"
     }

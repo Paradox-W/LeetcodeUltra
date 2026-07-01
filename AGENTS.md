@@ -73,6 +73,13 @@ git -C /Users/paradox/Documents/LeetcodeUltra diff --stat
 - Do not break Chinese IME. Avoid webview rebuilds or DOM replacement while composition is active.
 - Preserve important decisions in this file or a handoff.
 
+## Reuse First
+
+- When a task touches a hard, mature domain such as debuggers, compilers, language runtimes, parsers, protocol clients, formatters, or framework integrations, pause before building or extending a custom implementation.
+- First ask whether the user already has a preferred plugin, library, CLI, or workflow for that domain. If the user is not immediately available, inspect the local workspace and installed VS Code extensions, then check official docs or established packages before hand-rolling.
+- Prefer integrating with existing, maintained solutions over duplicating infrastructure. Only continue with a custom implementation after confirming that no suitable existing solution is available, or after explicitly explaining the tradeoff.
+- For C++ LeetCode debugging specifically, check for existing LeetCode/C++ debugger plugins and their generated files before modifying LeetcodeUltra's local debug harness.
+
 ## Historical Notes
 
 The sections below preserve the installed-extension analysis that guided the first source migration. Many paths mention `out/src/...` because the original customizations were discovered in compiled runtime output. For new work, translate those references back to the matching TypeScript files under `src/...`.

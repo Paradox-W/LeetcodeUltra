@@ -13,6 +13,8 @@ class LeetCodeWorkbenchProvider {
         this.currentResult = undefined;
         this.currentDocumentUri = undefined;
         this.savingCases = false;
+        this.aiDebugEnabledKey = "lcpr.workbench.aiDebugEnabled";
+        this.aiDebugEnabled = !!this.context.workspaceState.get(this.aiDebugEnabledKey, false);
     }
     resolveWebviewView(webviewView) {
         this.view = webviewView;
@@ -118,7 +120,37 @@ class LeetCodeWorkbenchProvider {
             this.currentDocumentUri = leetCodeEditor.document.uri.toString();
             return leetCodeEditor;
         }
-        return (editor === null || editor === void 0 ? void 0 : editor.document) && editor.document.uri.scheme === "file" ? editor : undefined;
+        return undefined;
+    }
+    getRememberedUri() {
+        var _a;
+        const raw = ((_a = this.currentState) === null || _a === void 0 ? void 0 : _a.uri) || this.currentDocumentUri;
+        if (!raw) {
+            return undefined;
+        }
+        try {
+            return vscode.Uri.parse(raw);
+        }
+        catch (_) {
+            return undefined;
+        }
+    }
+    async resolveActionDocument(editor) {
+        const document = editor === null || editor === void 0 ? void 0 : editor.document;
+        if (document && this.isLeetCodeDocument(document)) {
+            return document;
+        }
+        const uri = this.getRememberedUri();
+        if (!uri) {
+            return undefined;
+        }
+        try {
+            const rememberedDocument = await vscode.workspace.openTextDocument(uri);
+            return this.isLeetCodeDocument(rememberedDocument) ? rememberedDocument : undefined;
+        }
+        catch (_) {
+            return undefined;
+        }
     }
     isLeetCodeDocument(document) {
         return /@lc app=.* id=.* lang=.*/.test(document.getText());
@@ -151,6 +183,7 @@ class LeetCodeWorkbenchProvider {
                 cases: [],
                 dirty: false,
                 result: this.currentResult,
+                aiDebugEnabled: this.aiDebugEnabled,
             };
         }
         const text = editor.document.getText();
@@ -163,6 +196,7 @@ class LeetCodeWorkbenchProvider {
             cases: this.parseCases(text),
             dirty: editor.document.isDirty,
             result: this.currentResult,
+            aiDebugEnabled: this.aiDebugEnabled,
         };
     }
     parseCases(text) {
@@ -291,9 +325,13 @@ class LeetCodeWorkbenchProvider {
             });
         });
     }
-    runAction(action, testCase) {
+    async runAction(action, testCase, options = {}) {
         const editor = this.getActiveEditor();
-        const uri = editor === null || editor === void 0 ? void 0 : editor.document.uri;
+        const actionDocument = await this.resolveActionDocument(editor);
+        const uri = (actionDocument === null || actionDocument === void 0 ? void 0 : actionDocument.uri) || this.getRememberedUri();
+        const enableAiDebug = Object.prototype.hasOwnProperty.call(options, "enableAiDebug")
+            ? !!options.enableAiDebug
+            : !!this.aiDebugEnabled;
         if (!uri && ["submit", "test", "retest", "case", "allcase", "runCase", "debug"].indexOf(action) >= 0) {
             vscode.window.showWarningMessage("请先打开一个力扣题目文件。");
             return;
@@ -323,8 +361,16 @@ class LeetCodeWorkbenchProvider {
                 this.baba.sendNotification(this.babaStr.BABACMD_getHelp, uri);
                 break;
             case "debug":
-                if (editor === null || editor === void 0 ? void 0 : editor.document) {
-                    this.baba.sendNotification(this.babaStr.BABACMD_simpleDebug, { document: editor.document, testCase });
+                if (actionDocument) {
+                    this.setRunningResult("debug", testCase);
+                    await this.baba.sendNotificationAsync(this.babaStr.BABACMD_simpleDebug, {
+                        document: actionDocument,
+                        testCase,
+                        enableAiDebug,
+                    });
+                }
+                else {
+                    vscode.window.showWarningMessage("请先打开一个力扣题目文件。");
                 }
                 break;
             case "runCase":
@@ -335,7 +381,7 @@ class LeetCodeWorkbenchProvider {
         }
     }
     setRunningResult(action, testCase) {
-        if (["submit", "test", "retest", "case", "allcase", "runCase"].indexOf(action) < 0) {
+        if (["submit", "test", "retest", "case", "allcase", "runCase", "debug"].indexOf(action) < 0) {
             return;
         }
         this.currentResult = {
@@ -392,8 +438,14 @@ class LeetCodeWorkbenchProvider {
             case "saveCases":
                 await this.saveCases(message.cases || [], { silent: !!message.silent });
                 break;
+            case "setAiDebugEnabled":
+                this.aiDebugEnabled = !!message.value;
+                await this.context.workspaceState.update(this.aiDebugEnabledKey, this.aiDebugEnabled);
+                this.currentState = this.readState();
+                this.postState();
+                break;
             case "action":
-                this.runAction(message.action, message.testCase);
+                await this.runAction(message.action, message.testCase, { enableAiDebug: !!message.enableAiDebug });
                 break;
             default:
                 break;
@@ -459,6 +511,47 @@ class LeetCodeWorkbenchProvider {
     .toolbar-edit {
       justify-self: end;
     }
+    .toolbar-check {
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 6px;
+      color: var(--vscode-button-secondaryForeground);
+      white-space: nowrap;
+      user-select: none;
+    }
+    .toolbar-check input {
+      margin: 0;
+      width: 14px;
+      height: 14px;
+      appearance: none;
+      -webkit-appearance: none;
+      position: relative;
+      border: 1px solid var(--vscode-checkbox-border, #8a8a8a);
+      border-radius: 2px;
+      background: var(--vscode-checkbox-background, transparent);
+      cursor: pointer;
+    }
+    .toolbar-check input:checked {
+      border-color: var(--vscode-descriptionForeground, #767676);
+      background: var(--vscode-descriptionForeground, #767676);
+    }
+    .toolbar-check input:checked::after {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 1px;
+      width: 4px;
+      height: 8px;
+      border: solid var(--vscode-sideBar-background, #ffffff);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .toolbar-check input:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
     .toolbar button, .case-actions button {
       height: 24px;
       padding: 0 7px;
@@ -489,44 +582,6 @@ class LeetCodeWorkbenchProvider {
       font-weight: 500;
     }
     .toolbar .important:hover {
-      background: var(--vscode-toolbar-hoverBackground);
-    }
-    .toolbar-more {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-      z-index: 3;
-    }
-    .toolbar-more .more-button {
-      width: 24px;
-      min-width: 24px;
-      padding: 0;
-      color: var(--vscode-descriptionForeground);
-      background: transparent;
-      font-size: 18px;
-      line-height: 1;
-      font-family: var(--vscode-font-family);
-      font-weight: 600;
-    }
-    .toolbar-more .more-button:hover {
-      color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-hoverBackground);
-    }
-    .toolbar-menu {
-      display: none;
-      align-items: center;
-      gap: 4px;
-    }
-    .toolbar-more.open .toolbar-menu {
-      display: inline-flex;
-    }
-    .toolbar-menu button {
-      text-align: left;
-      color: var(--vscode-button-secondaryForeground);
-    }
-    .toolbar-menu button:hover {
-      color: var(--vscode-foreground);
       background: var(--vscode-toolbar-hoverBackground);
     }
     .problem-title {
@@ -1370,16 +1425,10 @@ class LeetCodeWorkbenchProvider {
     <div class="toolbar-group toolbar-run">
       <button data-action="submit" class="primary">提交</button>
       <button data-action="allcase" class="important">全部用例</button>
-      <div class="toolbar-more">
-        <button class="more-button" data-menu="more" title="更多操作" aria-label="更多操作" aria-expanded="false">⋯</button>
-        <div class="toolbar-menu" role="menu">
-          <button data-action="solution" role="menuitem">题解</button>
-          <button data-action="debug" role="menuitem">调试</button>
-        </div>
-      </div>
     </div>
     <div id="file" class="problem-title">未打开力扣题目</div>
     <div class="toolbar-group toolbar-edit">
+      <label class="toolbar-check"><input id="aiDebugToggle" type="checkbox">开启 AI 调试</label>
       <button id="refresh">恢复默认用例</button>
     </div>
   </div>
@@ -1399,6 +1448,7 @@ class LeetCodeWorkbenchProvider {
     const content = document.getElementById('content');
     const file = document.getElementById('file');
     const resultEl = document.getElementById('result');
+    const aiDebugToggle = document.getElementById('aiDebugToggle');
     const send = (message) => vscode.postMessage(message);
     function escapeHtml(value) {
       return String(value || '').replace(/[&<>"']/g, (ch) => ({
@@ -1452,12 +1502,14 @@ class LeetCodeWorkbenchProvider {
       if (runMode === 'submit') return '提交';
       if (runMode === 'allcase') return '全部用例';
       if (runMode === 'case') return '用例';
+      if (runMode === 'debug') return '调试';
       if (runMode === 'retest') return '重测';
       if (runMode === 'test') return '测试';
       const action = payload && payload.action;
       if (sys.sub_type === 'submit' || action === 'submit') return '提交';
       if (action === 'allcase') return '全部用例';
       if (action === 'case' || action === 'runCase') return '用例';
+      if (action === 'debug') return '调试';
       if (action === 'retest') return '重测';
       return '测试';
     }
@@ -1943,7 +1995,8 @@ class LeetCodeWorkbenchProvider {
       }
       const tone = getTone(payload);
       if (payload.phase === 'running') {
-        resultEl.innerHTML = '<div class="result-header tone-running"><span class="result-dot"></span><span>运行</span></div><div class="result-body tone-running"><div class="result-waiting">等待 LeetCode 返回结果。</div></div>';
+        const waitingText = payload.action === 'debug' ? '正在启动 C++ 调试器。' : '等待 LeetCode 返回结果。';
+        resultEl.innerHTML = '<div class="result-header tone-running"><span class="result-dot"></span><span>运行</span></div><div class="result-body tone-running"><div class="result-waiting">' + waitingText + '</div></div>';
         return;
       }
       resultEl.innerHTML = '<div class="result-body ' + tone + '">' + resultSummary(payload) + summaryLines(payload) + renderPerformanceCharts(payload) + diagnostics(payload) + '</div>';
@@ -1978,6 +2031,7 @@ class LeetCodeWorkbenchProvider {
     }
     function render() {
       file.innerHTML = escapeHtml(state.problemTitle || state.fileName || '未打开力扣题目') + (state.dirty ? ' <span class="dirty">已修改</span>' : '');
+      aiDebugToggle.checked = !!state.aiDebugEnabled;
       renderResult();
       equalizeResultBlocks();
       if (!state.isLeetCodeFile) {
@@ -2041,44 +2095,18 @@ class LeetCodeWorkbenchProvider {
       }
       saveCasesTimer = setTimeout(run, 650);
     }
-    function closeMoreMenu() {
-      const more = document.querySelector('.toolbar-more');
-      const button = more && more.querySelector('.more-button');
-      if (more) more.classList.remove('open');
-      if (button) {
-        button.setAttribute('aria-expanded', 'false');
-        button.textContent = '⋯';
-      }
-    }
-    function toggleMoreMenu() {
-      const more = document.querySelector('.toolbar-more');
-      const button = more && more.querySelector('.more-button');
-      if (!more) return;
-      const nextOpen = !more.classList.contains('open');
-      more.classList.toggle('open', nextOpen);
-      if (button) {
-        button.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
-        button.textContent = '⋯';
-      }
-    }
     document.querySelector('.toolbar').addEventListener('click', (event) => {
       const target = event.target && event.target.closest ? event.target.closest('button') : event.target;
-      if (target && target.dataset && target.dataset.menu === 'more') {
-        toggleMoreMenu();
-        return;
-      }
       const action = target && target.dataset && target.dataset.action;
       if (action === 'allcase') {
-        closeMoreMenu();
-        send({ type: 'action', action, testCase: visibleAllcaseValue() });
+        send({ type: 'action', action, testCase: visibleAllcaseValue(), enableAiDebug: !!state.aiDebugEnabled });
       } else if (action) {
-        closeMoreMenu();
-        send({ type: 'action', action });
+        send({ type: 'action', action, enableAiDebug: !!state.aiDebugEnabled });
       }
     });
-    window.addEventListener('click', (event) => {
-      const insideMore = event.target && event.target.closest && event.target.closest('.toolbar-more');
-      if (!insideMore) closeMoreMenu();
+    aiDebugToggle.addEventListener('change', () => {
+      state.aiDebugEnabled = aiDebugToggle.checked;
+      send({ type: 'setAiDebugEnabled', value: state.aiDebugEnabled });
     });
     document.getElementById('refresh').addEventListener('click', () => send({ type: 'refreshOfficial' }));
     content.addEventListener('click', (event) => {
@@ -2098,7 +2126,7 @@ class LeetCodeWorkbenchProvider {
       }
       if (target.dataset.debug !== undefined) {
         const testCase = currentCases()[Number(target.dataset.debug)];
-        send({ type: 'action', action: 'debug', testCase: testCase && testCase.value });
+        send({ type: 'action', action: 'debug', testCase: testCase && testCase.value, enableAiDebug: !!state.aiDebugEnabled });
       }
       if (target.dataset.delete !== undefined) {
         const index = Number(target.dataset.delete);

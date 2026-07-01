@@ -1,35 +1,44 @@
-import { cacheApi } from "./api/cacheApi";
-
-import { pluginApi } from "./api/pluginApi";
-import { queryApi } from "./api/queryApi";
-import { showApi } from "./api/showApi";
-import { starApi } from "./api/starApi";
-import { submitApi } from "./api/submitApi";
-import { testApi } from "./api/testApi";
-import { userApi } from "./api/userApi";
-import { IApi } from "./apiBase";
-
+// @ts-nocheck
+import * as cacheApi_1 from "./api/cacheApi";
+import * as pluginApi_1 from "./api/pluginApi";
+import * as queryApi_1 from "./api/queryApi";
+import * as showApi_1 from "./api/showApi";
+import * as starApi_1 from "./api/starApi";
+import * as submitApi_1 from "./api/submitApi";
+import * as submissionsApi_1 from "./api/submissionsApi";
+import * as testApi_1 from "./api/testApi";
+import * as userApi_1 from "./api/userApi";
 class ApiFactory {
-  constructor() {}
-  getApi(api: string): IApi | undefined {
-    if (api == "cache") {
-      return cacheApi;
-    } else if (api == "plugin") {
-      return pluginApi;
-    } else if (api == "query") {
-      return queryApi;
-    } else if (api == "show") {
-      return showApi;
-    } else if (api == "star") {
-      return starApi;
-    } else if (api == "submit") {
-      return submitApi;
-    } else if (api == "test") {
-      return testApi;
-    } else if (api == "user") {
-      return userApi;
+    constructor() { }
+    getApi(api) {
+        if (api == "cache") {
+            return cacheApi_1.cacheApi;
+        }
+        else if (api == "plugin") {
+            return pluginApi_1.pluginApi;
+        }
+        else if (api == "query") {
+            return queryApi_1.queryApi;
+        }
+        else if (api == "show") {
+            return showApi_1.showApi;
+        }
+        else if (api == "star") {
+            return starApi_1.starApi;
+        }
+        else if (api == "submit") {
+            return submitApi_1.submitApi;
+        }
+        else if (api == "submissions") {
+            return submissionsApi_1.submissionsApi;
+        }
+        else if (api == "test") {
+            return testApi_1.testApi;
+        }
+        else if (api == "user") {
+            return userApi_1.userApi;
+        }
+        return undefined;
     }
-    return undefined;
-  }
 }
-export const apiFactory: ApiFactory = new ApiFactory();
+export const apiFactory = new ApiFactory();

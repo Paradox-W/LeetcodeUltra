@@ -1,10 +1,10 @@
 {
-    "name": "vscode-leetcode-problem-rating",
-    "displayName": "LeetCode",
+    "name": "leetcodeultra",
+    "displayName": "LeetcodeUltra",
     "description": "%main.description%",
     "version": "3.2.4",
     "author": "ccagml",
-    "publisher": "ccagml",
+    "publisher": "paradox",
     "license": "MIT",
     "icon": "resources/LCPR.png",
     "engines": {
@@ -12,9 +12,9 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/ccagml/leetcode-extension"
+        "url": "https://github.com/Paradox-W/LeetcodeUltra"
     },
-    "homepage": "https://github.com/ccagml/leetcode-extension/README.md",
+    "homepage": "https://github.com/Paradox-W/LeetcodeUltra#readme",
     "categories": [
         "Other",
         "Snippets",
@@ -40,7 +40,14 @@
         "onCommand:lcpr.submitSolution",
         "onCommand:lcpr.setDefaultLanguage",
         "onCommand:lcpr.problems.sort",
-        "onView:QuestionExplorer"
+        "onView:QuestionExplorer",
+        "onCommand:lcpr.problemDisplayOptions",
+        "onCommand:lcpr.workbench.refresh",
+        "onCommand:lcpr.workbench.case",
+        "onCommand:lcpr.workbench.allcase",
+        "onCommand:lcpr.workbench.debug",
+        "onView:LCPRWorkbench",
+        "onView:LCPRCompanionView"
     ],
     "main": "./out/src/extension",
     "contributes": {
@@ -263,6 +270,36 @@
                 "command": "lcpr.removeBricksNeedReviewDayNode",
                 "title": "%main.contributes.commands.lcpr.removeBricksNeedReviewDayNode.title%",
                 "icon": "$(remove)"
+            },
+            {
+                "command": "lcpr.problemDisplayOptions",
+                "title": "题目列表显示选项",
+                "category": "LeetCode",
+                "icon": "$(settings-gear)"
+            },
+            {
+                "command": "lcpr.workbench.refresh",
+                "title": "刷新力扣控制台",
+                "category": "LeetCode",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "lcpr.workbench.case",
+                "title": "运行当前用例",
+                "category": "LeetCode",
+                "icon": "$(run)"
+            },
+            {
+                "command": "lcpr.workbench.allcase",
+                "title": "运行全部用例",
+                "category": "LeetCode",
+                "icon": "$(run-all)"
+            },
+            {
+                "command": "lcpr.workbench.debug",
+                "title": "调试当前用例",
+                "category": "LeetCode",
+                "icon": "$(debug-alt)"
             }
         ],
         "viewsContainers": {
@@ -270,6 +307,20 @@
                 {
                     "id": "lcpr_bar",
                     "title": "%main.contributes.viewsContainers.activitybar.lcpr_bar.title%",
+                    "icon": "resources/LCPR.svg"
+                }
+            ],
+            "panel": [
+                {
+                    "id": "lcpr_workbench_panel",
+                    "title": "力扣控制台",
+                    "icon": "resources/LCPR.svg"
+                }
+            ],
+            "secondarySidebar": [
+                {
+                    "id": "lcpr_companion_container",
+                    "title": "力扣助手",
                     "icon": "resources/LCPR.svg"
                 }
             ]
@@ -283,6 +334,20 @@
                 {
                     "id": "BricksExplorer",
                     "name": "%main.contributes.views.lcpr_bar.BricksExplorer.name%"
+                }
+            ],
+            "lcpr_workbench_panel": [
+                {
+                    "id": "LCPRWorkbench",
+                    "name": "力扣控制台",
+                    "type": "webview"
+                }
+            ],
+            "lcpr_companion_container": [
+                {
+                    "id": "LCPRCompanionView",
+                    "name": "题目与题解",
+                    "type": "webview"
                 }
             ]
         },
@@ -1205,6 +1270,39 @@
                             "%main.contributes.configuration.properties.leetcode-problem-rating.cppCompiler.enumDescriptions.2%"
                         ],
                         "scope": "resource"
+                    },
+                    "leetcode-problem-rating.problemListDisplay": {
+                        "type": "object",
+                        "default": {
+                            "showAcStatus": true,
+                            "showDifficultyColor": false,
+                            "showProblemId": true,
+                            "showScorePrefix": false
+                        },
+                        "scope": "application",
+                        "properties": {
+                            "showAcStatus": {
+                                "type": "boolean",
+                                "default": true,
+                                "description": "在 LCPR 题目列表中显示通过、失败、锁定和未知状态图标。"
+                            },
+                            "showDifficultyColor": {
+                                "type": "boolean",
+                                "default": false,
+                                "description": "按难度或分数给 LCPR 题目列表上色。"
+                            },
+                            "showProblemId": {
+                                "type": "boolean",
+                                "default": true,
+                                "description": "在题目前显示数字题号。"
+                            },
+                            "showScorePrefix": {
+                                "type": "boolean",
+                                "default": false,
+                                "description": "有分数时，在题目前显示分数前缀。"
+                            }
+                        },
+                        "description": "控制 LCPR 题目列表显示内容。"
                     }
                 }
             }

@@ -31,6 +31,10 @@ import { RankScoreDataMediator, RankScoreDataProxy } from "./rankScore/RankScore
 import { TodayDataMediator, TodayDataProxy } from "./todayData/TodayDataModule";
 import { RecentContestMediator, RecentContestProxy } from "./recentContestData/RecentContestDataModule";
 import { ContestQuestionMediator, ContestQuestionProxy } from "./recentContestData/ContestQuestionDataModule";
+import { registerLeetCodeWorkbench } from "./workbench/LeetCodeWorkbenchModule";
+import { registerLeetCodeCompanion } from "./companion/CompanionModule";
+import { registerLeetCodeFolding } from "./workbench/LeetCodeFoldingModule";
+import { registerProblemListDisplayOptions } from "./workbench/ProblemListDisplayModule";
 
 //==================================BABA========================================
 
@@ -85,6 +89,10 @@ export async function activate(context: ExtensionContext): Promise<void> {
     context.subscriptions.push(
       markdownService,
       BABA,
+      registerLeetCodeWorkbench(context, BABA, BabaStr),
+      registerLeetCodeCompanion(context),
+      registerLeetCodeFolding(context),
+      registerProblemListDisplayOptions(context, treeDataService),
       window.registerFileDecorationProvider(treeColor),
       window.createTreeView("QuestionExplorer", { treeDataProvider: treeDataService, showCollapseAll: true }),
       window.createTreeView("BricksExplorer", { treeDataProvider: bricksDataService, showCollapseAll: true }),

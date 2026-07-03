@@ -536,6 +536,30 @@ class StorageUtils {
       .replace(/\n{3,}/g, "\n\n");
   }
 
+  public removeGeneratedScaffoldingFromText(content) {
+    const original = String(content || "");
+    const eol = original.indexOf("\r\n") >= 0 ? "\r\n" : "\n";
+    let text = original.replace(/\r\n/g, "\n");
+
+    text = this.removeCaseAnnotationsFromText(text);
+    text = text
+      .replace(/^\s*(?:\/\/|#|--)\s*@lcpr-before-debug-begin[\s\S]*?^\s*(?:\/\/|#|--)\s*@lcpr-before-debug-end\s*\n?/gm, "")
+      .replace(/^\s*(?:\/\/|#|--)\s*@lcpr-after-debug-begin[\s\S]*?^\s*(?:\/\/|#|--)\s*@lcpr-after-debug-end\s*\n?/gm, "")
+      .replace(/^\s*\/\*[\s\S]*?@lc\s+app=[\s\S]*?\*\/\s*/m, "")
+      .replace(/^\s*\/\*\*[\s\S]*?(?:Definition for|The .* API is defined|Forward declaration)[\s\S]*?\*\/\s*/gm, "")
+      .replace(/^\s*(?:\/\/|#|--)\s*@lcpr-template-start[\s\S]*?^\s*(?:\/\/|#|--)\s*@lcpr-template-end\s*\n?/gm, "")
+      .replace(/^\s*#\s*include\s+[<"]leetcode-definition\.(?:h|hpp)[>"]\s*\n?/gm, "")
+      .replace(/^\s*(?:\/\/|#|--)\s*@lc\s+app=.*\n?/gm, "")
+      .replace(/^\s*(?:\/\/|#|--)\s*@lcpr\s+version=.*\n?/gm, "")
+      .replace(/^\s*(?:\/\/|#|--)\s*@lc\s+code=(?:start|end)\s*\n?/gm, "")
+      .replace(/^\s*#line\s+\d+.*\n?/gm, "")
+      .replace(/^\s*\/\*\s*\*\/\s*/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/^\n+/, "");
+
+    return eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text;
+  }
+
   /**
    * name
    */

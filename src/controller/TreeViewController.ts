@@ -51,6 +51,7 @@ class TreeViewController {
             if (!document || document.uri.scheme !== "file") {
                 return false;
             }
+            this.migrateLeetCodeScaffoldingForDocument(document);
             const meta = (0, problemUtils_1.fileMeta)(document.getText(), document.fileName);
             if (!meta || meta.lang !== "cpp") {
                 return false;
@@ -64,6 +65,79 @@ class TreeViewController {
             if (!this.cppIntelliSenseConfiguredWorkspaces.has(workspaceFolder)) {
                 this.cppIntelliSenseConfiguredWorkspaces.add(workspaceFolder);
                 this.refreshCppLanguageServices();
+            }
+            return true;
+        }
+        catch (_) {
+            return false;
+        }
+    }
+    migrateLeetCodeScaffoldingForFile(filePath, workspaceFolder) {
+        try {
+            if (!filePath || !fs.existsSync(filePath)) {
+                return false;
+            }
+            const content = fs.readFileSync(filePath, "utf8");
+            const parsedMeta = storageUtils.parseProblemMetaFromText(content);
+            if (parsedMeta.id && parsedMeta.lang) {
+                storageUtils.writeProblemMeta(filePath, parsedMeta, workspaceFolder);
+            }
+            const meta = storageUtils.meta(filePath);
+            if (meta.id) {
+                const legacyCases = storageUtils.extractCaseAnnotationsFromText(content);
+                if (legacyCases.length > 0) {
+                    storageUtils.writeProblemCases(filePath, meta.id, legacyCases, workspaceFolder);
+                }
+            }
+            const cleaned = storageUtils.removeGeneratedScaffoldingFromText(content);
+            if (cleaned !== content) {
+                fs.writeFileSync(filePath, cleaned);
+                return true;
+            }
+        }
+        catch (_) {
+            // Migration is best-effort; never block opening or running a problem.
+        }
+        return false;
+    }
+    migrateLeetCodeScaffoldingForDocument(document) {
+        try {
+            if (!document || document.uri.scheme !== "file" || document.isDirty) {
+                return false;
+            }
+            const workspaceFolder = this.resolveIntelliSenseWorkspaceFolder(document);
+            const content = document.getText();
+            const parsedMeta = storageUtils.parseProblemMetaFromText(content);
+            const storedMeta = storageUtils.readProblemMeta(document.fileName);
+            const hasMeta = (parsedMeta.id && parsedMeta.lang) || (storedMeta.id && storedMeta.lang);
+            if (!hasMeta && !/@lcpr-template-|@lc\s+code=|#line\s+\d+|leetcode-definition\.(?:h|hpp)/.test(content)) {
+                return false;
+            }
+            if (parsedMeta.id && parsedMeta.lang) {
+                storageUtils.writeProblemMeta(document.fileName, parsedMeta, workspaceFolder);
+            }
+            const meta = storageUtils.meta(document.fileName);
+            if (meta.id) {
+                const legacyCases = storageUtils.extractCaseAnnotationsFromText(content);
+                if (legacyCases.length > 0) {
+                    storageUtils.writeProblemCases(document.fileName, meta.id, legacyCases, workspaceFolder);
+                }
+            }
+            const cleaned = storageUtils.removeGeneratedScaffoldingFromText(content);
+            if (cleaned === content) {
+                return false;
+            }
+            const editor = vscode.window.visibleTextEditors.find((item) => item.document === document);
+            if (editor) {
+                const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(content.length));
+                editor.edit((edit) => edit.replace(fullRange, cleaned)).then((success) => {
+                    if (success) {
+                        document.save().then(undefined, () => undefined);
+                    }
+                }, () => undefined);
+            }
+            else {
+                fs.writeFileSync(document.fileName, cleaned);
             }
             return true;
         }
@@ -647,6 +721,7 @@ class TreeViewController {
                     this.ensureCppIntelliSenseConfig(workspaceFolder, definitionPath);
                     this.refreshCppLanguageServices();
                 }
+                this.migrateLeetCodeScaffoldingForFile(filePath, workspaceFolder);
                 storageUtils.writeProblemMeta(filePath, {
                     app: "leetcode",
                     id: node.id || node.fid || node.qid,

@@ -31,7 +31,7 @@ class CorePlugin extends ChainNodeBase {
     super();
   }
 
-  private cleanCodeTemplate(code: string, lang: string): string {
+  private cleanCodeTemplate = (code: string, lang: string): string => {
     let normalized = String(code || "").replace(/\r\n/g, "\n");
     if (lang !== "cpp") {
       return normalized;
@@ -42,7 +42,7 @@ class CorePlugin extends ChainNodeBase {
       return /Definition for|The .* API is defined|Forward declaration/i.test(block) ? "" : block;
     });
     return normalized.replace(/^\n+/, "");
-  }
+  };
 
   /* It's a method that filters the problems. */
   filterProblems = (opts, cb) => {

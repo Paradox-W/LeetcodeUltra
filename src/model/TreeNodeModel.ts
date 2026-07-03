@@ -140,6 +140,10 @@ export enum TreeNodeType {
   Tree_recentContestList_contest = 11010,  // 题目列表 最近比赛列表/比赛
   Tree_recentContestList_contest_leaf = 11011,  // 题目列表 最近比赛列表/比赛/题目
 
+  Tree_carl = 11100, // 代码随想录题单
+  Tree_carl_section = 11110, // 代码随想录题单/板块
+  Tree_carl_section_leaf = 11111, // 代码随想录题单/板块/题目
+
   // 工地=================
 
   Bricks_NeedReview = 20100,  // 工地 有需要复习
@@ -180,7 +184,8 @@ export function is_problem_by_nodeType(nt) {
     nodeType == TreeNodeType.Bricks_NeedReview_Day_leaf ||
     nodeType == TreeNodeType.Bricks_TodaySubmit_leaf ||
     nodeType == TreeNodeType.Bricks_Diy_leaf ||
-    nodeType == TreeNodeType.Tree_recentContestList_contest_leaf
+    nodeType == TreeNodeType.Tree_recentContestList_contest_leaf ||
+    nodeType == TreeNodeType.Tree_carl_section_leaf
   );
 
 }

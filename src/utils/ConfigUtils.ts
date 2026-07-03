@@ -11,7 +11,6 @@ import {
   workspace,
   WorkspaceConfiguration,
   commands,
-  MessageItem,
   window,
   Uri,
   ConfigurationTarget,
@@ -24,9 +23,6 @@ import {
   Endpoint,
   SortingStrategy,
   AllProgramLanguage,
-  DialogOptions,
-  OpenOption,
-  IQuickItemEx,
   singleLineFlag,
   OutPutType,
 } from "../model/ConstDefind";
@@ -206,6 +202,10 @@ export function enableSideMode(): boolean {
   return getVsCodeConfig().get<boolean>("enableSideMode", true);
 }
 
+export function autoCreateFileOnPreview(): boolean {
+  return getVsCodeConfig().get<boolean>("autoCreateFileOnPreview", false);
+}
+
 export function getNodePath() {
   return getVsCodeConfig().get<string>("nodePath", "node" /* default value */);
 }
@@ -264,60 +264,11 @@ export async function fetchProblemLanguage(): Promise<string | undefined> {
   if (defaultLanguage && AllProgramLanguage.indexOf(defaultLanguage) < 0) {
     defaultLanguage = undefined;
   }
-  const language: string | undefined =
-    defaultLanguage ||
-    (await window.showQuickPick(AllProgramLanguage, {
-      placeHolder: "Select the language you want to use",
-      ignoreFocusOut: true,
-    }));
-
-  (async (): Promise<void> => {
-    if (language && !defaultLanguage && leetCodeConfig.get<boolean>("hint.setDefaultLanguage")) {
-      const choice: MessageItem | undefined = await window.showInformationMessage(
-        `设置 '${language}' 默认编程语言?`,
-        DialogOptions.yes,
-        DialogOptions.no,
-        DialogOptions.never
-      );
-      if (choice === DialogOptions.yes) {
-        leetCodeConfig.update("defaultLanguage", language, true);
-      } else if (choice === DialogOptions.never) {
-        leetCodeConfig.update("hint.setDefaultLanguage", false, true);
-      }
-    }
-  })();
-  return language;
+  return defaultLanguage || (AllProgramLanguage.indexOf("cpp") >= 0 ? "cpp" : AllProgramLanguage[0]);
 }
 
 export async function determineLeetCodeFolder(): Promise<string> {
-  let result: string;
-  const picks: Array<IQuickItemEx<string>> = [];
-  picks.push(
-    {
-      label: `Default location`,
-      detail: `${path.join(os.homedir(), ".lcpr")}`,
-      value: `${path.join(os.homedir(), ".lcpr")}`,
-    },
-    {
-      label: "$(file-directory) Browse...",
-      value: ":browse",
-    }
-  );
-  const choice: IQuickItemEx<string> | undefined = await window.showQuickPick(picks, {
-    placeHolder: "Select where you would like to save your LeetCode files",
-  });
-  if (!choice) {
-    result = "";
-  } else if (choice.value === ":browse") {
-    const directory: Uri[] | undefined = await showDirectorySelectDialog();
-    if (!directory || directory.length < 1) {
-      result = "";
-    } else {
-      result = directory[0].fsPath;
-    }
-  } else {
-    result = choice.value;
-  }
+  const result: string = path.join(os.homedir(), ".lcpr");
 
   await getVsCodeConfig().update("workspaceFolder", result, ConfigurationTarget.Global);
 
@@ -325,45 +276,7 @@ export async function determineLeetCodeFolder(): Promise<string> {
 }
 
 export async function updateWorkSpaceByList(list: Array<string>): Promise<string> {
-  let result: string;
-  const picks: Array<IQuickItemEx<string>> = [];
-
-  for (let index = 0; index < list.length; index++) {
-    const element = list[index];
-    picks.push({
-      label: `切换workspaceFolder目录为:${element}`,
-      detail: `${element}`,
-      value: `${element}`,
-    });
-  }
-
-  let choice: IQuickItemEx<string> | undefined;
-
-  if (picks.length == 1) {
-    choice = picks[0];
-  } else {
-    picks.push({
-      label: "$(file-directory) Browse...",
-      value: ":browse",
-    });
-
-    choice = await window.showQuickPick(picks, {
-      placeHolder: "选择 workspaceFolderList 中的目录作为 workspaceFolder",
-    });
-  }
-
-  if (!choice) {
-    result = "";
-  } else if (choice.value === ":browse") {
-    const directory: Uri[] | undefined = await showDirectorySelectDialog();
-    if (!directory || directory.length < 1) {
-      result = "";
-    } else {
-      result = directory[0].fsPath;
-    }
-  } else {
-    result = choice.value;
-  }
+  const result: string = list[0] || "";
 
   await getVsCodeConfig().update("workspaceFolder", result, ConfigurationTarget.Global);
 
@@ -428,7 +341,7 @@ export async function selectWorkspaceFolderList() {
   }
 }
 
-export async function selectWorkspaceFolder(isAsk: boolean = true): Promise<string> {
+export async function selectWorkspaceFolder(_isAsk: boolean = true): Promise<string> {
   let workspaceFolderSetting: string = getWorkspaceFolder();
   if (workspaceFolderSetting.trim() === "") {
     workspaceFolderSetting = await determineLeetCodeFolder();
@@ -437,40 +350,7 @@ export async function selectWorkspaceFolder(isAsk: boolean = true): Promise<stri
       return workspaceFolderSetting;
     }
   }
-  let needAsk: boolean = true;
   await fse.ensureDir(workspaceFolderSetting);
-  for (const folder of workspace.workspaceFolders || []) {
-    if (isSubFolder(folder.uri.fsPath, workspaceFolderSetting)) {
-      needAsk = false;
-    }
-  }
-
-  if (needAsk && isAsk) {
-    const choice: string | undefined = await window.showQuickPick(
-      [OpenOption.justOpenFile, OpenOption.openInCurrentWindow, OpenOption.openInNewWindow, OpenOption.addToWorkspace],
-      {
-        placeHolder: "The LeetCode workspace folder is not opened in VS Code, would you like to open it?",
-      }
-    );
-    switch (choice) {
-      case OpenOption.justOpenFile:
-        return workspaceFolderSetting;
-      case OpenOption.openInCurrentWindow:
-        await commands.executeCommand("vscode.openFolder", Uri.file(workspaceFolderSetting), false);
-        return "";
-      case OpenOption.openInNewWindow:
-        await commands.executeCommand("vscode.openFolder", Uri.file(workspaceFolderSetting), true);
-        return "";
-      case OpenOption.addToWorkspace:
-        workspace.updateWorkspaceFolders(workspace.workspaceFolders?.length ?? 0, 0, {
-          uri: Uri.file(workspaceFolderSetting),
-        });
-        break;
-      default:
-        return "";
-    }
-  }
-
   return useWsl() ? toWslPath(workspaceFolderSetting) : workspaceFolderSetting;
 }
 
@@ -551,4 +431,3 @@ export function getbricksReviewDay() {
   const shortcuts: number[] = getVsCodeConfig().get<number[]>("bricksReviewDay", [1, 4, 7, 14, 28, 60]);
   return shortcuts
 }
-

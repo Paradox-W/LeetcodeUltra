@@ -7,7 +7,7 @@
  * Copyright (c) 2022 ccagml . All rights reserved.
  */
 
-import { ExtensionContext, window, commands, Uri, CommentReply, TextDocument } from "vscode";
+import { ConfigurationTarget, ExtensionContext, window, commands, Uri, CommentReply, TextDocument, workspace } from "vscode";
 import { TreeNodeModel } from "./model/TreeNodeModel";
 import { treeColor } from "./treeColor/TreeColorModule";
 import { ShowMessage } from "./utils/OutputUtils";
@@ -32,7 +32,7 @@ import { TodayDataMediator, TodayDataProxy } from "./todayData/TodayDataModule";
 import { RecentContestMediator, RecentContestProxy } from "./recentContestData/RecentContestDataModule";
 import { ContestQuestionMediator, ContestQuestionProxy } from "./recentContestData/ContestQuestionDataModule";
 import { registerLeetCodeWorkbench } from "./workbench/LeetCodeWorkbenchModule";
-import { registerLeetCodeCompanion } from "./companion/CompanionModule";
+import { companionService, registerLeetCodeCompanion } from "./companion/CompanionModule";
 import { registerLeetCodeFolding } from "./workbench/LeetCodeFoldingModule";
 import { registerProblemListDisplayOptions } from "./workbench/ProblemListDisplayModule";
 import { registerAiDebug } from "./aiDebug/AiDebugModule";
@@ -105,7 +105,15 @@ export async function activate(context: ExtensionContext): Promise<void> {
       commands.registerCommand("lcpr.signin", () => BABA.sendNotification(BabaStr.BABACMD_Login)),
       commands.registerCommand("lcpr.signout", () => BABA.sendNotification(BabaStr.BABACMD_LoginOut)),
       commands.registerCommand("lcpr.previewProblem", (node: TreeNodeModel) => {
-        BABA.sendNotification(BabaStr.BABACMD_previewProblem, { input: node, isSideMode: false });
+        BABA.sendNotification(BabaStr.BABACMD_previewProblem, { input: node, isSideMode: false, autoCreate: true });
+      }),
+      commands.registerCommand("lcpr.autoCreateFileOptions", async () => {
+        const config = workspace.getConfiguration("leetcode-problem-rating");
+        const current = !!config.get<boolean>("autoCreateFileOnPreview", false);
+        const next = !current;
+        await config.update("autoCreateFileOnPreview", next, ConfigurationTarget.Global);
+        companionService.revealAndRender(true);
+        window.showInformationMessage(next ? "已开启自动创建文件。" : "已关闭自动创建文件。");
       }),
       commands.registerCommand("lcpr.showProblem", (node: TreeNodeModel) => {
         BABA.sendNotification(BabaStr.BABACMD_showProblem, node);

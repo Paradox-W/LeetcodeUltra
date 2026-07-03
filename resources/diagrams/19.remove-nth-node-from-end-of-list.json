@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "problem": {
+    "qid": "19",
+    "slug": "remove-nth-node-from-end-of-list",
+    "title": "Remove Nth Node From End of List"
+  },
+  "replacements": [
+    {
+      "match": {
+        "imageSrcIncludes": "remove_ex1",
+        "example": 1
+      },
+      "diagram": {
+        "type": "linkedListTransform",
+        "before": {
+          "nodes": [1, 2, 3, 4, 5],
+          "highlights": [
+            { "index": 3, "tone": "danger" }
+          ]
+        },
+        "after": {
+          "nodes": [1, 2, 3, 5]
+        },
+        "transition": {
+          "type": "downArrow",
+          "fromIndex": 2,
+          "toIndex": 2
+        }
+      }
+    }
+  ]
+}

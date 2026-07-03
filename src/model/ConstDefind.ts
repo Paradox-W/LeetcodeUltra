@@ -133,6 +133,7 @@ export enum RootNodeSort {
   Company = 5,
   Favorite = 6,
   Choice = 7,
+  Carl = 8,
   Score = 8,
   ScoreRange = 9,
   Contest = 9,
@@ -196,6 +197,7 @@ export enum Category {
   Favorite = "Favorite",
   Score = "Score",
   Choice = "Choice",
+  Carl = "Carl",
   Contest = "Contest",
   RecentContestList = "RecentContestList",
 }

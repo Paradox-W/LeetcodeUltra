@@ -35,6 +35,7 @@
         "onCommand:lcpr.deleteAllCache",
         "onCommand:lcpr.showProblem",
         "onCommand:lcpr.previewProblem",
+        "onCommand:lcpr.autoCreateFileOptions",
         "onCommand:lcpr.searchProblem",
         "onCommand:lcpr.testSolution",
         "onCommand:lcpr.submitSolution",
@@ -110,6 +111,12 @@
                 "command": "lcpr.previewProblem",
                 "title": "%main.contributes.commands.lcpr.previewProblem.title%",
                 "category": "LeetCode"
+            },
+            {
+                "command": "lcpr.autoCreateFileOptions",
+                "title": "%main.contributes.commands.lcpr.autoCreateFileOptions.title%",
+                "category": "LeetCode",
+                "icon": "$(gear)"
             },
             {
                 "command": "lcpr.setBricksType0",
@@ -521,6 +528,11 @@
                     "group": "navigation@4"
                 },
                 {
+                    "command": "lcpr.autoCreateFileOptions",
+                    "when": "view == QuestionExplorer",
+                    "group": "navigation@5"
+                },
+                {
                     "command": "lcpr.problems.sort",
                     "when": "view == QuestionExplorer",
                     "group": "overflow@0"
@@ -918,6 +930,12 @@
                         "default": true,
                         "scope": "application",
                         "description": "%main.contributes.configuration.properties.leetcode-problem-rating.useEndpointTranslation.description%"
+                    },
+                    "leetcode-problem-rating.autoCreateFileOnPreview": {
+                        "type": "boolean",
+                        "default": false,
+                        "scope": "application",
+                        "description": "%main.contributes.configuration.properties.leetcode-problem-rating.autoCreateFileOnPreview.description%"
                     },
                     "leetcode-problem-rating.answerDiffColor": {
                         "type": "boolean",
@@ -1489,6 +1507,33 @@
                         },
                         "scope": "application",
                         "description": "AI 调试 OpenAI 兼容 API 的统一 JSON 配置；未配置字段会兼容回退到旧 aiVisualize.api。"
+                    },
+                    "leetcode-problem-rating.diagramAuthor.api": {
+                        "type": "object",
+                        "default": {
+                            "provider": "coze",
+                            "baseUrl": "https://api.coze.cn/v1",
+                            "token": "",
+                            "tokenEnv": "COZE_API_TOKEN",
+                            "workflowId": "",
+                            "botId": "",
+                            "appId": "",
+                            "uploadPath": "/files/upload",
+                            "workflowRunPath": "/workflow/run",
+                            "imageValueType": "file_id_json",
+                            "outputKey": "diagram",
+                            "timeoutMs": 120000,
+                            "headers": {},
+                            "parameterKeys": {
+                                "image": "image"
+                            },
+                            "workflowModelHints": {
+                                "visionNode": "在扣子工作流内选择支持图片输入和结构化输出的多模态模型",
+                                "compilerNode": "在扣子工作流内选择稳定遵循 JSON Schema 的文本模型"
+                            }
+                        },
+                        "scope": "application",
+                        "description": "题图重绘离线工作流的扣子 API 配置。默认只向扣子 workflow 传入图片，workflow 返回布局 JSON；本地脚本再包装题号、匹配信息并校验落盘。填入 token 或 tokenEnv，并配置 workflowId 后即可运行 diagram:author。"
                     }
                 }
             }
@@ -1500,7 +1545,10 @@
         "watch": "tsc -watch -p ./",
         "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
         "test:ai-debug": "npm run compile && node scripts/ai-debug-smoke.js",
-        "test:ai-debug:extension": "npm run compile && node scripts/ai-debug-extension-test-runner.js"
+        "test:ai-debug:extension": "npm run compile && node scripts/ai-debug-extension-test-runner.js",
+        "diagram:author": "node scripts/diagram-author.js",
+        "diagram:validate": "npm run compile && node scripts/diagram-validate.js",
+        "diagram:render-fixtures": "npm run compile && node scripts/diagram-render-fixtures.js"
     },
     "devDependencies": {
         "@types/fs-extra": "^9.0.11",

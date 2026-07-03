@@ -138,10 +138,10 @@ class PreviewService extends BaseWebviewService_1.BaseWebViewService {
                 ${difficultyInfo}
                 <hr />
                 ${links}
-                ${!this.sideMode ? button.element : ""}
+                ${!this.sideMode && !ConfigUtils_1.autoCreateFileOnPreview() ? button.element : ""}
                 <script>
                     const vscode = acquireVsCodeApi();
-                    ${!this.sideMode ? button.script : ""}
+                    ${!this.sideMode && !ConfigUtils_1.autoCreateFileOnPreview() ? button.script : ""}
                 </script>
             </body>
             </html>

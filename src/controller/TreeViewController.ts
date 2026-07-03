@@ -31,6 +31,7 @@ import * as ConfigUtils_2 from "../utils/ConfigUtils";
 import * as systemUtils from "../utils/SystemUtils";
 import * as fse from "fs-extra";
 import * as groupDao_1 from "../dao/groupDao";
+import { carlDao } from "../dao/carlDao";
 import * as problemUtils_1 from "../utils/problemUtils";
 import * as BABA_1 from "../BABA";
 // 视图控制器
@@ -977,6 +978,11 @@ class TreeViewController {
                 rootNodeSortId: ConstDefind_1.RootNodeSort.Choice,
             }, TreeNodeModel_1.TreeNodeType.Tree_choice),
             (0, TreeNodeModel_1.CreateTreeNodeModel)({
+                id: ConstDefind_1.Category.Carl,
+                name: "代码随想录题单",
+                rootNodeSortId: ConstDefind_1.RootNodeSort.Carl,
+            }, TreeNodeModel_1.TreeNodeType.Tree_carl),
+            (0, TreeNodeModel_1.CreateTreeNodeModel)({
                 id: ConstDefind_1.Category.Contest,
                 name: ConstDefind_1.Category.Contest,
                 rootNodeSortId: ConstDefind_1.RootNodeSort.Contest,
@@ -1180,6 +1186,13 @@ class TreeViewController {
         });
         return res;
     }
+    getCarlChild() {
+        return carlDao.getProblemList().map((section, index) => (0, TreeNodeModel_1.CreateTreeNodeModel)({
+            id: section.id,
+            name: section.name,
+            rootNodeSortId: index,
+        }, TreeNodeModel_1.TreeNodeType.Tree_carl_section));
+    }
     getTagChild() {
         const res = [];
         for (const tag of BABA_1.BABA.getProxy(BABA_1.BabaStr.QuestionDataProxy).getTagSet().values()) {
@@ -1217,6 +1230,19 @@ class TreeViewController {
                     return;
                 }
             });
+        }
+        if (TreeChildNode.nodeType == TreeNodeModel_1.TreeNodeType.Tree_carl_section) {
+            const section = carlDao.getSection(TreeChildNode.id);
+            if (!section) {
+                return res;
+            }
+            for (const fid of section.questions) {
+                const node = BABA_1.BABA.getProxy(BABA_1.BabaStr.QuestionDataProxy).getNodeById(fid);
+                if (node && this.canShow(node)) {
+                    res.push((0, TreeNodeModel_1.CreateTreeNodeModel)(node.get_data(), TreeNodeModel_1.TreeNodeType.Tree_carl_section_leaf));
+                }
+            }
+            return res;
         }
         for (const node of BABA_1.BABA.getProxy(BABA_1.BabaStr.QuestionDataProxy).getfidMapQuestionData().values()) {
             if (!this.canShow(node)) {

@@ -29,9 +29,11 @@ import * as BABA_1 from "../BABA";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
 import * as SystemUtils_1 from "../utils/SystemUtils";
 import * as ProblemListDisplayModule_1 from "../workbench/ProblemListDisplayModule";
+import { companionService } from "../companion/CompanionModule";
 class TreeDataService {
     constructor() {
         this.onDidChangeTreeDataEvent = new vscode.EventEmitter();
+        this.previewLoadSeq = 0;
         // tslint:disable-next-line:member-ordering
         this.onDidChangeTreeData = this.onDidChangeTreeDataEvent.event;
     }
@@ -150,6 +152,9 @@ class TreeDataService {
             else if (element.nodeType == TreeNodeModel_1.TreeNodeType.Tree_choice) {
                 return TreeViewController_1.treeViewController.getChoiceChild();
             }
+            else if (element.nodeType == TreeNodeModel_1.TreeNodeType.Tree_carl) {
+                return TreeViewController_1.treeViewController.getCarlChild();
+            }
             else if (element.nodeType == TreeNodeModel_1.TreeNodeType.Tree_contest) {
                 return TreeViewController_1.treeViewController.getContestChild();
             }
@@ -234,8 +239,9 @@ class TreeDataService {
             }
         });
     }
-    previewProblem(input, isSideMode = false) {
+    previewProblem(input, isSideMode = false, autoCreate = false) {
         return __awaiter(this, void 0, void 0, function* () {
+            const seq = ++this.previewLoadSeq;
             let node;
             if (input instanceof vscode.Uri) {
                 const activeFilePath = input.fsPath;
@@ -256,27 +262,60 @@ class TreeDataService {
             else {
                 node = input;
             }
+            companionService.showDescriptionLoading(node, 1);
             const needTranslation = (0, ConfigUtils_1.isUseEndpointTranslation)();
-            const descString = yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy)
-                .get_instance()
-                .getDescription(node.qid, needTranslation);
-            let successResult;
-            try {
-                successResult = JSON.parse(descString);
+            const startedAt = Date.now();
+            const timeoutMs = 20000;
+            const intervalMs = 1500;
+            let attempt = 0;
+            let lastError = "";
+            while (Date.now() - startedAt <= timeoutMs) {
+                attempt += 1;
+                companionService.showDescriptionLoading(node, attempt);
+                try {
+                    const descString = yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy)
+                        .get_instance()
+                        .getDescription(node.qid, needTranslation);
+                    if (seq !== this.previewLoadSeq) {
+                        return;
+                    }
+                    let successResult;
+                    try {
+                        successResult = JSON.parse(descString);
+                    }
+                    catch (e) {
+                        successResult = {};
+                    }
+                    if (successResult.code == 100) {
+                        BABA_1.BABA.sendNotification(BABA_1.BabaStr.Preview_show, {
+                            descString: JSON.stringify(successResult.msg),
+                            node: node,
+                            isSideMode: isSideMode,
+                        });
+                        if (autoCreate && (0, ConfigUtils_1.autoCreateFileOnPreview)()) {
+                            vscode.commands.executeCommand("lcpr.showProblem", node);
+                        }
+                        return;
+                    }
+                    lastError = String(successResult.error || successResult.msg || descString || "题面加载失败。");
+                }
+                catch (error) {
+                    if (seq !== this.previewLoadSeq) {
+                        return;
+                    }
+                    lastError = error && error.message ? error.message : String(error || "题面加载失败。");
+                }
+                if (Date.now() - startedAt + intervalMs > timeoutMs) {
+                    break;
+                }
+                companionService.showDescriptionError(node, lastError, attempt, true);
+                yield new Promise((resolve) => setTimeout(resolve, intervalMs));
+                if (seq !== this.previewLoadSeq) {
+                    return;
+                }
             }
-            catch (e) {
-                successResult = {};
-            }
-            if (successResult.code == 100) {
-                BABA_1.BABA.sendNotification(BABA_1.BabaStr.Preview_show, {
-                    descString: JSON.stringify(successResult.msg),
-                    node: node,
-                    isSideMode: isSideMode,
-                });
-            }
-            else {
-                yield (0, OutputUtils_1.ShowMessage)(`${descString} 请查看控制台信息~`, ConstDefind_1.OutPutType.error);
-            }
+            companionService.showDescriptionError(node, lastError || "题面加载超时。", attempt, false);
+            yield (0, OutputUtils_1.ShowMessage)(`${lastError || "题面加载超时。"} 请查看控制台信息~`, ConstDefind_1.OutPutType.error);
         });
     }
     signIn() {
@@ -458,7 +497,7 @@ class TreeDataMediator extends BABA_1.BABAMediator {
                     treeDataService.switchEndpoint();
                     break;
                 case BABA_1.BabaStr.BABACMD_previewProblem:
-                    treeDataService.previewProblem(body.input, body.isSideMode);
+                    treeDataService.previewProblem(body.input, body.isSideMode, !!body.autoCreate);
                     break;
                 case BABA_1.BabaStr.BABACMD_showProblem:
                     TreeViewController_1.treeViewController.showProblem(body);

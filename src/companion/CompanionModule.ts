@@ -7,6 +7,8 @@ import * as ConstDefind_1 from "../model/ConstDefind";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
 import * as MarkdownService_1 from "../service/MarkdownService";
 import * as BABA_1 from "../BABA";
+import { findDiagramReplacement, loadDiagramPack } from "../diagram/DiagramLoader";
+import { renderDiagram, sanitizeRenderedSvg } from "../diagram/DiagramRenderer";
 class LeetCodeCompanionProvider {
     constructor(context) {
         this.context = context;
@@ -14,6 +16,7 @@ class LeetCodeCompanionProvider {
         this.state = {
             activeTab: "empty",
             description: undefined,
+            descriptionStatus: undefined,
             node: undefined,
             solution: undefined,
             hints: undefined,
@@ -261,7 +264,40 @@ body .submission-code code.hljs .hljs-strong {
     }
     showDescription(description, node) {
         this.state.description = description;
+        this.state.descriptionStatus = undefined;
         this.state.node = node;
+        this.state.activeTab = "description";
+        this.revealAndRender(true);
+    }
+    showDescriptionLoading(node, attempt = 1) {
+        this.state.node = node;
+        this.state.description = {
+            title: node && node.name ? node.name : "力扣助手",
+            url: "",
+            body: "",
+        };
+        this.state.descriptionStatus = {
+            loading: true,
+            error: "",
+            attempt,
+            willRetry: true,
+        };
+        this.state.activeTab = "description";
+        this.revealAndRender(true);
+    }
+    showDescriptionError(node, error, attempt = 1, willRetry = false) {
+        this.state.node = node || this.state.node;
+        this.state.description = {
+            title: node && node.name ? node.name : "力扣助手",
+            url: "",
+            body: "",
+        };
+        this.state.descriptionStatus = {
+            loading: false,
+            error: String(error || "题面加载失败。"),
+            attempt,
+            willRetry: !!willRetry,
+        };
         this.state.activeTab = "description";
         this.revealAndRender(true);
     }
@@ -544,6 +580,24 @@ body .submission-code code.hljs .hljs-strong {
 	  ${this.getStyle()}
 </head>
 <body>
+  <svg class="lcpr-svg-filters" aria-hidden="true" focusable="false" width="0" height="0">
+    <defs>
+      <filter id="lcpr-invert-luminance" color-interpolation-filters="linearRGB">
+        <feComponentTransfer>
+          <feFuncR type="gamma" amplitude="1" exponent="0.5" offset="0" />
+          <feFuncG type="gamma" amplitude="1" exponent="0.5" offset="0" />
+          <feFuncB type="gamma" amplitude="1" exponent="0.5" offset="0" />
+          <feFuncA type="gamma" amplitude="1" exponent="1" offset="0" />
+        </feComponentTransfer>
+        <feColorMatrix type="matrix" values="
+          1 -1 -1 0 1
+         -1 1 -1 0 1
+         -1 -1 1 0 1
+          0 0 0 1 0
+        " />
+      </filter>
+    </defs>
+  </svg>
   <main class="lcpr-companion">
     ${this.renderHeader()}
     <section class="lcpr-content">
@@ -558,6 +612,33 @@ body .submission-code code.hljs .hljs-strong {
     const vscode = acquireVsCodeApi();
     const state = Object.assign({}, vscode.getState() || {}, ${stateJson});
     vscode.setState(state);
+    const FONT_LEVEL_MIN = -3;
+    const FONT_LEVEL_MAX = 5;
+    function clampFontLevel(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return 0;
+      return Math.max(FONT_LEVEL_MIN, Math.min(FONT_LEVEL_MAX, Math.round(number)));
+    }
+    function getBaseFontSize() {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const bodyStyle = getComputedStyle(document.body);
+      const raw = rootStyle.getPropertyValue('--vscode-font-size') || bodyStyle.fontSize || '13px';
+      const parsed = parseFloat(raw);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 13;
+    }
+    function applyReadingFontSize() {
+      state.readerFontLevel = clampFontLevel(state.readerFontLevel);
+      const size = Math.max(11, Math.min(22, getBaseFontSize() + state.readerFontLevel));
+      document.documentElement.style.setProperty('--lcpr-reading-font-size', size + 'px');
+      document.querySelectorAll('[data-font-control]').forEach((button) => {
+        const action = button.getAttribute('data-font-control');
+        const disabled = action === 'decrease' ? state.readerFontLevel <= FONT_LEVEL_MIN : state.readerFontLevel >= FONT_LEVEL_MAX;
+        button.disabled = disabled;
+        button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      });
+      vscode.setState(state);
+    }
+    applyReadingFontSize();
     const noteSearch = document.querySelector('[data-submission-note-search]');
     function normalizeClientSearch(value) {
       return String(value || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
@@ -601,6 +682,13 @@ body .submission-code code.hljs .hljs-strong {
     document.addEventListener('click', (event) => {
       const clicked = event.target && event.target.closest ? event.target : event.target && event.target.parentElement;
       if (!clicked || !clicked.closest) return;
+      const fontControl = clicked.closest('[data-font-control]');
+      if (fontControl) {
+        const action = fontControl.getAttribute('data-font-control');
+        state.readerFontLevel = clampFontLevel(state.readerFontLevel) + (action === 'increase' ? 1 : -1);
+        applyReadingFontSize();
+        return;
+      }
       const toggle = clicked.closest('[data-toggle-code]');
       if (toggle) {
         const code = document.querySelector('[data-submission-code]');
@@ -697,6 +785,9 @@ body .submission-code code.hljs .hljs-strong {
         if (this.state.activeTab === "description" && this.state.description) {
             return "description";
         }
+        if (this.state.activeTab === "description" && this.state.descriptionStatus) {
+            return "description";
+        }
         if (this.state.activeTab === "solution" && this.state.solution) {
             return "solution";
         }
@@ -729,12 +820,24 @@ body .submission-code code.hljs .hljs-strong {
         return `<header class="lcpr-header">
   <div class="lcpr-title-row">
     <h1>${url ? `<a href="${this.escapeAttr(url)}">${this.escapeHtml(title)}</a>` : this.escapeHtml(title)}</h1>
-    ${this.state.node && activeTab !== "submissions" ? `<button class="lcpr-icon-button" data-command="showProblem" title="开始写代码" aria-label="开始写代码">&lt;/&gt;</button>` : ""}
+    ${this.shouldShowCodeNow(activeTab) ? `<button class="lcpr-icon-button" data-command="showProblem" title="开始写代码" aria-label="开始写代码">&lt;/&gt;</button>` : ""}
   </div>
 </header>`;
     }
+    shouldShowCodeNow(activeTab) {
+        return !!(this.state.node && activeTab !== "submissions" && !ConfigUtils_1.autoCreateFileOnPreview());
+    }
+    renderFontControls() {
+        return `<span class="lcpr-font-controls" role="group" aria-label="题面字号">
+  <button class="lcpr-font-button" type="button" data-font-control="decrease" title="缩小字号" aria-label="缩小字号">A-</button>
+  <button class="lcpr-font-button" type="button" data-font-control="increase" title="放大字号" aria-label="放大字号">A+</button>
+</span>`;
+    }
     renderDescription() {
         const d = this.state.description;
+        if (this.state.descriptionStatus) {
+            return this.renderDescriptionStatus();
+        }
         if (!d) {
             return this.renderEmpty("还没有题面。");
         }
@@ -747,8 +850,21 @@ body .submission-code code.hljs .hljs-strong {
   <div class="lcpr-body">${this.refineProblemBody(d.body || "")}</div>
   ${this.renderInlineHints()}
   <div class="lcpr-meta-footer">
-    <div class="lcpr-secondary-actions">${links}</div>
+    <div class="lcpr-secondary-actions"><span class="lcpr-secondary-links">${links}</span>${this.renderFontControls()}</div>
     ${this.renderTargets(d)}
+  </div>
+</article>`;
+    }
+    renderDescriptionStatus() {
+        const status = this.state.descriptionStatus || {};
+        const title = status.loading ? "正在加载题面" : "题面加载失败";
+        const detail = status.loading
+            ? `正在请求题面${status.attempt ? `（第 ${status.attempt} 次）` : ""}。`
+            : `${status.error || "题面加载失败。"}${status.willRetry ? " 正在重试。" : ""}`;
+        return `<article class="lcpr-pane">
+  <div class="lcpr-load-state ${status.loading ? "loading" : "error"}">
+    <div class="lcpr-load-title">${this.escapeHtml(title)}</div>
+    <p>${this.escapeHtml(detail)}</p>
   </div>
 </article>`;
     }
@@ -1005,7 +1121,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
         return `${number}. ${raw}`;
     }
     refineProblemBody(body) {
-        return String(body || "")
+        const refined = String(body || "")
             .replace(/(<h[1-6][^>]*>\s*)提示\s*[:：]?\s*(<\/h[1-6]>)/g, "$1约束$2")
             .replace(/(<strong[^>]*>\s*)提示\s*[:：]?\s*(<\/strong>)/g, "$1约束$2")
             .replace(/<pre\b[^>]*>([\s\S]*?)<\/pre>/g, (match, rawCode) => {
@@ -1019,6 +1135,60 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   <code class="lcpr-example-value">${block.value}</code>
 </div>`).join("")}</div>`;
         });
+        return this.replaceProblemDiagrams(refined);
+    }
+    replaceProblemDiagrams(body) {
+        const pack = loadDiagramPack(this.state.node || {});
+        if (!pack) {
+            return body;
+        }
+        let imageIndex = 0;
+        return String(body || "").replace(/<img\b([^>]*)>/gi, (match, attrs, offset, source) => {
+            const src = this.extractHtmlAttr(attrs, "src");
+            if (!src) {
+                return match;
+            }
+            imageIndex += 1;
+            const image = {
+                src,
+                alt: this.extractHtmlAttr(attrs, "alt"),
+                example: this.inferImageExample(source, offset, imageIndex),
+                index: imageIndex,
+            };
+            const replacement = findDiagramReplacement(pack, image);
+            if (!replacement) {
+                return match;
+            }
+            const svg = sanitizeRenderedSvg(renderDiagram(replacement.diagram));
+            if (!svg) {
+                return match;
+            }
+            const alt = image.alt ? ` aria-label="${this.escapeAttr(image.alt)}"` : "";
+            return `<figure class="lcpr-diagram"${alt}>${svg}</figure>`;
+        });
+    }
+    extractHtmlAttr(attrs, name) {
+        const pattern = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>` + "`" + `]+))`, "i");
+        const match = String(attrs || "").match(pattern);
+        return match ? this.decodeHtmlAttr(match[1] || match[2] || match[3] || "") : "";
+    }
+    decodeHtmlAttr(value) {
+        return String(value || "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">");
+    }
+    inferImageExample(source, offset, fallback) {
+        const prefix = String(source || "").slice(0, offset);
+        const matches = [...prefix.matchAll(/示例\s*(\d+)|Example\s*(\d+)/gi)];
+        if (!matches.length) {
+            return fallback;
+        }
+        const last = matches[matches.length - 1];
+        const value = Number(last[1] || last[2]);
+        return Number.isFinite(value) && value > 0 ? value : fallback;
     }
     parseExampleCode(code) {
         const source = this.htmlToPlainText(code).trim();
@@ -1529,6 +1699,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   --lcpr-hover: var(--vscode-toolbar-hoverBackground);
   --lcpr-input: var(--vscode-input-background);
   --lcpr-code-bg: var(--vscode-textCodeBlock-background, var(--vscode-editor-inactiveSelectionBackground));
+  --lcpr-reading-font-size: var(--vscode-font-size, 13px);
   --lcpr-success-deep: #137333;
   --lcpr-success: #2ea043;
   --lcpr-focus-gray: #b7b7b7;
@@ -1544,6 +1715,12 @@ html, body {
   line-height: 1.48;
 }
 body { overflow-x: hidden; }
+.lcpr-svg-filters {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
 .lcpr-companion {
   box-sizing: border-box;
   min-height: 100vh;
@@ -1612,6 +1789,43 @@ h1 a:hover, h1 a:focus, h1 a:active {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
 }
+.lcpr-font-controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+.lcpr-font-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.lcpr-font-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--vscode-textLink-activeForeground, var(--vscode-foreground));
+}
+.lcpr-font-button:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+.lcpr-font-button:disabled {
+  color: var(--lcpr-muted);
+  cursor: default;
+  opacity: .48;
+}
 .lcpr-chips, .lcpr-tags, .lcpr-section-meta, .lcpr-secondary-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1637,14 +1851,21 @@ h1 a:hover, h1 a:focus, h1 a:active {
 .lcpr-content { padding: 14px 16px 24px; }
 .lcpr-pane { display: flex; flex-direction: column; gap: 14px; }
 .lcpr-tags a { background: transparent; }
-.lcpr-body { min-width: 0; }
+.lcpr-markdown {
+  font-size: var(--lcpr-reading-font-size);
+}
+.lcpr-body {
+  min-width: 0;
+  overflow-x: hidden;
+  padding-bottom: 2px;
+}
 .lcpr-markdown h1, .lcpr-markdown h2, .lcpr-markdown h3, .lcpr-markdown h4 {
   margin: 18px 0 9px;
   padding: 0;
   border: 0;
   color: var(--lcpr-fg);
   font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 15px;
+  font-size: calc(var(--lcpr-reading-font-size) + 2px);
   font-weight: 700;
   text-align: left;
 }
@@ -1693,9 +1914,38 @@ h1 a:hover, h1 a:focus, h1 a:active {
 }
 .lcpr-markdown img {
   display: block;
+  box-sizing: border-box;
+  width: auto;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+  margin: 8px 0;
+}
+body.vscode-dark .lcpr-markdown img,
+body.vscode-high-contrast .lcpr-markdown img {
+  filter: url("#lcpr-invert-luminance");
+}
+.lcpr-diagram {
+  --lcpr-diagram-edge: color-mix(in srgb, var(--lcpr-fg) 82%, transparent);
+  --lcpr-diagram-text: var(--lcpr-fg);
+  --lcpr-diagram-danger: color-mix(in srgb, var(--vscode-testing-iconFailed, #f85149) 30%, var(--lcpr-bg));
+  --lcpr-diagram-accent: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 24%, var(--lcpr-bg));
+  --lcpr-diagram-muted-fill: var(--lcpr-input);
+  width: 100%;
+  margin: 10px 0 12px;
+  padding: 8px 0;
+  overflow-x: hidden;
+}
+.lcpr-diagram-svg {
+  display: block;
+  width: auto;
+  min-width: 0;
   max-width: 100%;
   height: auto;
-  margin: 8px 0;
+  max-height: 210px;
+}
+.lcpr-diagram-node text {
+  font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 }
 .lcpr-markdown blockquote {
   padding: 2px 0 2px 10px;
@@ -1706,10 +1956,17 @@ h1 a:hover, h1 a:focus, h1 a:active {
   margin-top: 16px;
 }
 .lcpr-secondary-actions {
+  align-items: center;
   justify-content: flex-start;
   gap: 10px;
   padding: 0 0 7px;
   border-bottom: 1px solid var(--lcpr-border);
+}
+.lcpr-secondary-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
 }
 .lcpr-secondary-actions a, .lcpr-secondary-actions button {
   display: inline-flex;
@@ -1730,6 +1987,12 @@ h1 a:hover, h1 a:focus, h1 a:active {
 .lcpr-secondary-actions a:hover, .lcpr-secondary-actions button:hover {
   background: transparent;
   color: var(--vscode-textLink-activeForeground, var(--vscode-foreground));
+}
+.lcpr-secondary-actions button:disabled,
+.lcpr-secondary-actions button:disabled:hover {
+  color: var(--lcpr-muted);
+  cursor: default;
+  opacity: .48;
 }
 .lcpr-example-split {
   display: flex;
@@ -1809,15 +2072,17 @@ h1 a:hover, h1 a:focus, h1 a:active {
   padding: 0 8px 8px;
 }
 .lcpr-empty {
-  margin-top: 18px;
-  padding: 14px 12px;
-  border: 1px dashed var(--lcpr-border);
-  border-radius: 4px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   color: var(--lcpr-muted);
 }
 .lcpr-empty.compact {
   margin-top: 8px;
   padding: 10px;
+  border: 1px dashed var(--lcpr-border);
+  border-radius: 4px;
 }
 .lcpr-empty-title {
   margin-bottom: 4px;
@@ -1825,6 +2090,22 @@ h1 a:hover, h1 a:focus, h1 a:active {
   font-weight: 650;
 }
 .lcpr-empty p { margin: 0; }
+.lcpr-load-state {
+  margin: 0;
+  padding: 0;
+  color: var(--lcpr-muted);
+}
+.lcpr-load-title {
+  margin-bottom: 4px;
+  color: var(--lcpr-fg);
+  font-weight: 650;
+}
+.lcpr-load-state p {
+  margin: 0;
+}
+.lcpr-load-state.error .lcpr-load-title {
+  color: var(--vscode-errorForeground, var(--lcpr-fg));
+}
 .lcpr-callout, .lcpr-loading {
   padding: 8px 10px;
   border: 1px solid var(--lcpr-border);

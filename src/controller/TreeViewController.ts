@@ -34,6 +34,7 @@ import * as groupDao_1 from "../dao/groupDao";
 import { carlDao } from "../dao/carlDao";
 import * as problemUtils_1 from "../utils/problemUtils";
 import * as BABA_1 from "../BABA";
+import { storageUtils } from "../rpc/utils/storageUtils";
 // 视图控制器
 class TreeViewController {
     constructor() {
@@ -601,6 +602,124 @@ class TreeViewController {
             yield this.showProblemInternal(node);
         });
     }
+    initializeProblemSidecars(node, filePath, workspaceFolder, language, needTranslation) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                if (language === "cpp") {
+                    const definitionPath = this.writeCppDefinitionFile(workspaceFolder);
+                    this.ensureCppIntelliSenseConfig(workspaceFolder, definitionPath);
+                }
+                if (storageUtils.readProblemCases(filePath, node.id || node.fid || node.qid).length > 0) {
+                    return;
+                }
+                const descString = yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy)
+                    .get_instance()
+                    .getDescription(node.qid, needTranslation);
+                const response = JSON.parse(descString);
+                const desc = response && response.code === 100 && response.msg ? response.msg.desc : "";
+                const cases = desc ? storageUtils.getAllCase(desc) : [];
+                if (cases.length > 0) {
+                    storageUtils.writeProblemCases(filePath, node.id || node.fid || node.qid, cases, workspaceFolder);
+                }
+            }
+            catch (_) {
+                // Sidecar data is an editor convenience; problem creation should still succeed.
+            }
+        });
+    }
+    writeCppDefinitionFile(workspaceFolder) {
+        const definitionPath = path.join(workspaceFolder, ".lcpr_data", "cpp", "leetcode-definition.hpp");
+        if (fs.existsSync(definitionPath)) {
+            return definitionPath;
+        }
+        fse.ensureDirSync(path.dirname(definitionPath));
+        fs.writeFileSync(definitionPath, [
+            "#pragma once",
+            "#include <algorithm>",
+            "#include <array>",
+            "#include <bitset>",
+            "#include <climits>",
+            "#include <cmath>",
+            "#include <deque>",
+            "#include <functional>",
+            "#include <iostream>",
+            "#include <list>",
+            "#include <map>",
+            "#include <queue>",
+            "#include <set>",
+            "#include <stack>",
+            "#include <string>",
+            "#include <tuple>",
+            "#include <unordered_map>",
+            "#include <unordered_set>",
+            "#include <utility>",
+            "#include <vector>",
+            "using namespace std;",
+            "",
+            "struct ListNode {",
+            "    int val;",
+            "    ListNode *next;",
+            "    ListNode() : val(0), next(nullptr) {}",
+            "    explicit ListNode(int x) : val(x), next(nullptr) {}",
+            "    ListNode(int x, ListNode *next) : val(x), next(next) {}",
+            "};",
+            "",
+            "struct TreeNode {",
+            "    int val;",
+            "    TreeNode *left;",
+            "    TreeNode *right;",
+            "    TreeNode() : val(0), left(nullptr), right(nullptr) {}",
+            "    explicit TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}",
+            "    TreeNode(int x, TreeNode *left, TreeNode *right) : val(x), left(left), right(right) {}",
+            "};",
+            "",
+        ].join("\n"));
+        return definitionPath;
+    }
+    ensureCppIntelliSenseConfig(workspaceFolder, definitionPath) {
+        try {
+            const vscodeDir = path.join(workspaceFolder, ".vscode");
+            const configPath = path.join(vscodeDir, "c_cpp_properties.json");
+            fse.ensureDirSync(vscodeDir);
+            let config;
+            if (fs.existsSync(configPath)) {
+                config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+            }
+            else {
+                config = {
+                    configurations: [
+                        {
+                            name: "LeetcodeUltra",
+                            includePath: ["${workspaceFolder}/**"],
+                            forcedInclude: [],
+                            cppStandard: "c++17",
+                        },
+                    ],
+                    version: 4,
+                };
+            }
+            if (!Array.isArray(config.configurations) || config.configurations.length === 0) {
+                config.configurations = [{ name: "LeetcodeUltra", includePath: ["${workspaceFolder}/**"], forcedInclude: [] }];
+            }
+            let changed = false;
+            config.configurations.forEach((item) => {
+                if (!Array.isArray(item.forcedInclude)) {
+                    item.forcedInclude = [];
+                    changed = true;
+                }
+                if (item.forcedInclude.indexOf(definitionPath) < 0) {
+                    item.forcedInclude.push(definitionPath);
+                    changed = true;
+                }
+            });
+            if (changed || !fs.existsSync(configPath)) {
+                fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+            }
+        }
+        catch (_) {
+            // Keep source generation independent from local C++ extension settings.
+        }
+    }
     pickOne() {
         return __awaiter(this, void 0, void 0, function* () {
             const picks = [];
@@ -706,6 +825,7 @@ class TreeViewController {
                     .get_instance()
                     .showProblem(node, language, finalPath, descriptionConfig.showInComment, needTranslation);
                 if (show_code == 100) {
+                    yield this.initializeProblemSidecars(node, finalPath, workspaceFolder, language, needTranslation);
                     const promises = [
                         vscode.window
                             .showTextDocument(vscode.Uri.file(finalPath), {

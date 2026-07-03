@@ -327,6 +327,106 @@ class StorageUtils {
     return data;
   }
 
+  public safeProblemId(problemId) {
+    return encodeURIComponent(String(problemId || "unknown")).replace(/%/g, "_");
+  }
+
+  public formatStoredCase(testCase) {
+    if (Array.isArray(testCase)) {
+      return testCase.map((item) => `${item}\n`).join("");
+    }
+    if (testCase && typeof testCase === "object" && testCase.value !== undefined) {
+      return String(testCase.value || "");
+    }
+    return String(testCase || "");
+  }
+
+  public normalizeCaseList(cases) {
+    return (cases || [])
+      .map((testCase) => this.deleteWriteCaseHeadENDn(this.formatStoredCase(testCase)))
+      .filter((testCase) => String(testCase || "").trim().length > 0);
+  }
+
+  public testCaseFile(filename, problemId, preferredRoot?) {
+    const safeId = this.safeProblemId(problemId);
+    if (preferredRoot) {
+      return path.join(preferredRoot, ".lcpr_data", "test-cases", `${safeId}.json`);
+    }
+
+    let dir = path.dirname(filename);
+    while (dir && dir !== path.dirname(dir)) {
+      const candidate = path.join(dir, ".lcpr_data", "test-cases", `${safeId}.json`);
+      if (this.exist(candidate)) {
+        return candidate;
+      }
+      dir = path.dirname(dir);
+    }
+
+    return path.join(path.dirname(filename), ".lcpr_data", "test-cases", `${safeId}.json`);
+  }
+
+  public readProblemCases(filename, problemId) {
+    const caseFile = this.testCaseFile(filename, problemId);
+    if (!this.exist(caseFile)) {
+      return [];
+    }
+    try {
+      const data = JSON.parse(this.getData(caseFile));
+      return this.normalizeCaseList(Array.isArray(data) ? data : data.cases);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  public writeProblemCases(filename, problemId, cases, preferredRoot?) {
+    const normalized = this.normalizeCaseList(cases);
+    const caseFile = this.testCaseFile(filename, problemId, preferredRoot);
+    this.mkdir(path.dirname(caseFile));
+    this.write(
+      caseFile,
+      JSON.stringify(
+        {
+          problemId,
+          updatedAt: new Date().toISOString(),
+          cases: normalized,
+        },
+        null,
+        2
+      )
+    );
+    return normalized;
+  }
+
+  public extractCaseAnnotationsFromText(content) {
+    const fileInfo = String(content || "").split("\n");
+    const tempTest: Array<any> = [];
+    let caseFlag: boolean = false;
+    let curCase = "";
+
+    for (let allInput = 0; allInput < fileInfo.length; allInput++) {
+      const lineContent = fileInfo[allInput];
+      if (caseFlag && lineContent.indexOf("@lcpr case=end") < 0) {
+        curCase += this.fix_lineContent(lineContent).replace(/\\n/g, "\n");
+      }
+      if (lineContent.indexOf("@lcpr case=start") >= 0) {
+        caseFlag = true;
+      }
+      if (caseFlag && lineContent.indexOf("@lcpr case=end") >= 0) {
+        tempTest.push(this.deleteWriteCaseHeadENDn(curCase));
+        curCase = "";
+        caseFlag = false;
+      }
+    }
+
+    return this.normalizeCaseList(tempTest);
+  }
+
+  public removeCaseAnnotationsFromText(content) {
+    return String(content || "")
+      .replace(/^\s*(?:\/\/|#|--)\s*@lcpr case=start[\s\S]*?^\s*(?:\/\/|#|--)\s*@lcpr case=end\s*\r?\n?/gm, "")
+      .replace(/\n{3,}/g, "\n\n");
+  }
+
   /**
    * name
    */
@@ -480,26 +580,13 @@ class StorageUtils {
   public meta(filename) {
     const m = Object.assign({}, defaultMETA, {});
 
-    let file_info = this.getData(filename).split("\n");
+    const content = this.getData(filename);
+    let file_info = content.split("\n");
 
-    let temp_test: Array<any> = [];
-    let caseFlag: boolean = false;
-    let curCase = "";
+    let temp_test: Array<any> = this.extractCaseAnnotationsFromText(content);
 
     for (let all_input = 0; all_input < file_info.length; all_input++) {
       const lineContent = file_info[all_input];
-      if (caseFlag && lineContent.indexOf("@lcpr case=end") < 0) {
-        curCase += this.fix_lineContent(lineContent).replace(/\\n/g, "\n");
-      }
-      // 收集所有用例
-      if (lineContent.indexOf("@lcpr case=start") >= 0) {
-        caseFlag = true;
-      }
-      if (caseFlag && lineContent.indexOf("@lcpr case=end") >= 0) {
-        temp_test.push(this.deleteWriteCaseHeadENDn(curCase));
-        curCase = "";
-        caseFlag = false;
-      }
       if (lineContent.indexOf(" @lc app=") >= 0) {
         // @lc app=leetcode.cn id=剑指 Offer II 116 lang=cpp
         let id_right = lineContent.split("id=")[1];
@@ -511,6 +598,9 @@ class StorageUtils {
         m.lang = lang;
       }
       m.writeCase = temp_test;
+    }
+    if (m.id) {
+      m.writeCase = this.normalizeCaseList([...temp_test, ...this.readProblemCases(filename, m.id)]);
     }
     return m;
   }

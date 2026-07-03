@@ -124,6 +124,9 @@ class TestApi extends ApiBase {
             temp_test_set.add(xxx);
           });
         }
+        storageUtils.readProblemCases(argv.filename, meta.id).forEach((xxx) => {
+          temp_test_set.add(xxx);
+        });
 
         let temp_test: Array<any> = [];
         temp_test_set.forEach((x) => {

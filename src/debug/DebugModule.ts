@@ -18,6 +18,7 @@ import { cppLeetCodePluginBridge } from "./CppLeetCodePluginBridge";
 import { DebugCpp } from "./DoCpp";
 import { DebugPy3 } from "./DoPy3";
 import { DebugJs } from "./DoJs";
+import { storageUtils } from "../rpc/utils/storageUtils";
 
 // 支持的语言环境
 // https://support.leetcode.com/hc/en-us/articles/360011833974-What-are-the-environments-for-the-programming-languages-
@@ -308,6 +309,13 @@ class DebugService {
   }
 
   public get_one_case(document: vscode.TextDocument) {
+    const meta = fileMeta(document.getText());
+    if (meta && meta.id) {
+      const storedCases = storageUtils.readProblemCases(document.fileName, meta.id);
+      if (storedCases.length > 0) {
+        return storedCases[0].replace(/\s+/g, "");
+      }
+    }
     let caseFlag = false;
     let curCase = "";
     for (let i: number = 0; i < document.lineCount; i++) {
@@ -381,6 +389,10 @@ class DebugService {
 
       if (meta.lang === "cpp") {
         if (testcase == undefined) {
+          const storedCases = storageUtils.readProblemCases(filePath, meta.id);
+          testcase = storedCases.length > 0 ? storedCases[0] : undefined;
+        }
+        if (testcase == undefined) {
           const ts_temp: string | undefined = await vscode.window.showInputBox({
             prompt: "输入用于 C++ 调试的测试用例。",
             validateInput: (s: string): string | undefined =>
@@ -416,6 +428,14 @@ class DebugService {
           return;
         }
         meta = fileMeta(document.getText());
+        if (meta == undefined) {
+          ShowMessage("无法识别当前力扣题目文件，缺少 @lc 元信息。", OutPutType.error);
+          return;
+        }
+      }
+      if (testcase == undefined) {
+        const storedCases = storageUtils.readProblemCases(filePath, meta.id);
+        testcase = storedCases.length > 0 ? storedCases[0] : undefined;
       }
       if (testcase == undefined) {
         const ts_temp: string | undefined = await vscode.window.showInputBox({

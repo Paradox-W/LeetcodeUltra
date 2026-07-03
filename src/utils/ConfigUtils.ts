@@ -392,7 +392,7 @@ export function isAnswerDiffColor(): boolean {
 }
 
 export function includeTemplatesAuto() {
-  return getVsCodeConfig().get<boolean>("includeTemplatesAuto", true);
+  return getVsCodeConfig().get<boolean>("includeTemplatesAuto", false);
 }
 
 export function getIncludeTemplate(lang: string): string {

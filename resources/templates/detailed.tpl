@@ -20,13 +20,3 @@
 <%=comment.singleLine%> @lc code=start
 <%=code%>
 <%=comment.singleLine%> @lc code=end
-
-
-<% if(allCaseList && allCaseList.length > 0){ %>
-<%=comment.start%><% allCaseList.forEach(function(acase) { %>
-<%=comment.singleLine%> @lcpr case=start
-<%=comment.singleLine%> <% acase.forEach(function(a_caseitem) { %><%=a_caseitem%>\n<% }) %>
-<%=comment.singleLine%> @lcpr case=end
-<% }) %>
-<%=comment.end%>
-<% } %>

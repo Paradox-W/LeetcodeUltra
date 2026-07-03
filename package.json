@@ -817,7 +817,7 @@
                     },
                     "leetcode-problem-rating.includeTemplatesAuto": {
                         "type": "boolean",
-                        "default": true,
+                        "default": false,
                         "description": "%main.contributes.configuration.properties.leetcode-problem-rating.includeTemplatesAuto.description%"
                     },
                     "leetcode-problem-rating.hideSolved": {

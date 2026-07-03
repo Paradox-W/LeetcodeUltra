@@ -188,16 +188,38 @@ class LeetCodeWorkbenchProvider {
         }
         const text = editor.document.getText();
         const fileName = editor.document.fileName.split(/[\\/]/).pop() || editor.document.fileName;
+        const cases = this.readCases(editor, text);
         return {
             isLeetCodeFile: true,
             fileName,
             problemTitle: this.getProblemTitle(text, editor.document.fileName),
             uri: editor.document.uri.toString(),
-            cases: this.parseCases(text),
+            cases,
             dirty: editor.document.isDirty,
             result: this.currentResult,
             aiDebugEnabled: this.aiDebugEnabled,
         };
+    }
+    readCases(editor, text) {
+        const meta = (0, problemUtils_1.fileMeta)(text);
+        if (!meta || !meta.id) {
+            return this.parseCases(text);
+        }
+        const storedCases = storageUtils_1.storageUtils.readProblemCases(editor.document.fileName, meta.id);
+        if (storedCases.length > 0) {
+            if (text.indexOf("@lcpr case=start") >= 0) {
+                this.removeCaseBlocks(editor);
+            }
+            return storedCases.map((value, index) => ({ id: `stored-${index}`, label: `用例 ${index + 1}`, value }));
+        }
+        const legacyCases = this.parseCases(text);
+        if (legacyCases.length > 0) {
+            const values = legacyCases.map((testCase) => testCase.value);
+            storageUtils_1.storageUtils.writeProblemCases(editor.document.fileName, meta.id, values);
+            this.removeCaseBlocks(editor);
+            return values.map((value, index) => ({ id: `stored-${index}`, label: `用例 ${index + 1}`, value }));
+        }
+        return [];
     }
     parseCases(text) {
         const lines = text.split(/\r?\n/);
@@ -249,47 +271,23 @@ class LeetCodeWorkbenchProvider {
         }
         return value.replace(/^\s?/, "").replace(/\s+$/g, "");
     }
-    getSingleLinePrefix(text) {
-        const match = text.match(/^(\s*(?:\/\/|#|--))\s*@lcpr case=start/m);
-        if (match) {
-            return match[1].trim();
-        }
-        if (/lang=python3?|\.py\b/.test(text)) {
-            return "#";
-        }
-        return "//";
-    }
-    buildCaseBlock(cases, prefix) {
-        if (!cases.length) {
-            return "";
-        }
-        return cases
-            .map((testCase) => [
-            `${prefix} @lcpr case=start`,
-            `${prefix} ${testCase.value || ""}`,
-            `${prefix} @lcpr case=end`,
-        ].join("\n"))
-            .join("\n\n");
-    }
-    getCaseRange(document) {
+    removeCaseBlocks(editor) {
+        const document = editor.document;
         const text = document.getText();
-        const lines = text.split(/\r?\n/);
-        let first = -1;
-        let last = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].indexOf("@lcpr case=start") >= 0 && first < 0) {
-                first = i;
-            }
-            if (lines[i].indexOf("@lcpr case=end") >= 0) {
-                last = i;
-            }
+        if (document.isDirty || text.indexOf("@lcpr case=start") < 0) {
+            return Promise.resolve(false);
         }
-        if (first >= 0 && last >= first) {
-            return new vscode.Range(first, 0, last, lines[last].length);
+        const nextText = storageUtils_1.storageUtils.removeCaseAnnotationsFromText(text);
+        if (nextText === text) {
+            return Promise.resolve(false);
         }
-        const codeEndLine = lines.findIndex((line) => line.indexOf("@lc code=end") >= 0);
-        const insertLine = codeEndLine >= 0 ? codeEndLine + 1 : lines.length;
-        return new vscode.Range(insertLine, 0, insertLine, 0);
+        const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+        return editor.edit((edit) => edit.replace(fullRange, nextText)).then((success) => {
+            if (success) {
+                return document.save().then(() => true, () => true);
+            }
+            return false;
+        });
     }
     saveCases(cases, options = {}) {
         return new Promise((resolve) => {
@@ -300,28 +298,23 @@ class LeetCodeWorkbenchProvider {
                 return;
             }
             const document = editor.document;
-            const prefix = this.getSingleLinePrefix(document.getText());
-            const nextBlock = this.buildCaseBlock(cases, prefix);
-            const range = this.getCaseRange(document);
-            const hasExistingCases = document.getText(range).indexOf("@lcpr case=") >= 0;
-            const replacement = hasExistingCases ? nextBlock : `\n${nextBlock}\n`;
-            editor.edit((edit) => edit.replace(range, replacement)).then((success) => {
-                if (!success) {
-                    vscode.window.showErrorMessage("更新力扣测试用例失败。");
-                    resolve(undefined);
-                    return;
+            const meta = (0, problemUtils_1.fileMeta)(document.getText());
+            if (!meta || !meta.id) {
+                vscode.window.showWarningMessage("无法在当前文件中找到力扣题号。");
+                resolve(undefined);
+                return;
+            }
+            storageUtils_1.storageUtils.writeProblemCases(document.fileName, meta.id, cases.map((testCase) => (testCase === null || testCase === void 0 ? void 0 : testCase.value) || ""));
+            this.savingCases = true;
+            this.removeCaseBlocks(editor).then(() => {
+                this.savingCases = false;
+                if (!options.silent) {
+                    this.refresh();
                 }
-                this.savingCases = true;
-                document.save().then(() => {
-                    this.savingCases = false;
-                    if (!options.silent) {
-                        this.refresh();
-                    }
-                    resolve(undefined);
-                }, () => {
-                    this.savingCases = false;
-                    resolve(undefined);
-                });
+                resolve(undefined);
+            }, () => {
+                this.savingCases = false;
+                resolve(undefined);
             });
         });
     }

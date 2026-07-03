@@ -972,7 +972,10 @@ class TreeViewController {
         }
     }
     refreshCppLanguageServices() {
-        vscode.commands.executeCommand("C_Cpp.RescanWorkspace").then(undefined, () => undefined);
+        const cppConfig = vscode.workspace.getConfiguration("C_Cpp");
+        if (cppConfig.get("intelliSenseEngine") !== "disabled") {
+            vscode.commands.executeCommand("C_Cpp.RescanWorkspace").then(undefined, () => undefined);
+        }
         vscode.commands.executeCommand("clangd.restart").then(undefined, () => undefined);
     }
     pickOne() {

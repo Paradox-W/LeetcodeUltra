@@ -36,6 +36,7 @@ import { companionService, registerLeetCodeCompanion } from "./companion/Compani
 import { registerLeetCodeFolding } from "./workbench/LeetCodeFoldingModule";
 import { registerProblemListDisplayOptions } from "./workbench/ProblemListDisplayModule";
 import { registerAiDebug } from "./aiDebug/AiDebugModule";
+import { treeViewController } from "./controller/TreeViewController";
 
 //==================================BABA========================================
 
@@ -95,6 +96,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
       registerLeetCodeFolding(context),
       registerProblemListDisplayOptions(context, treeDataService),
       registerAiDebug(context),
+      workspace.onDidOpenTextDocument((document) => treeViewController.ensureCppIntelliSenseForDocument(document)),
+      window.onDidChangeActiveTextEditor((editor) => {
+        if (editor) {
+          treeViewController.ensureCppIntelliSenseForDocument(editor.document);
+        }
+      }),
       window.registerFileDecorationProvider(treeColor),
       window.createTreeView("QuestionExplorer", { treeDataProvider: treeDataService, showCollapseAll: true }),
       window.createTreeView("BricksExplorer", { treeDataProvider: bricksDataService, showCollapseAll: true }),
@@ -250,6 +257,10 @@ export async function activate(context: ExtensionContext): Promise<void> {
     );
 
     await BABA.sendNotificationAsync(BabaStr.InitWorkspaceFolder, context);
+    workspace.textDocuments.forEach((document) => treeViewController.ensureCppIntelliSenseForDocument(document));
+    if (window.activeTextEditor) {
+      treeViewController.ensureCppIntelliSenseForDocument(window.activeTextEditor.document);
+    }
     await BABA.sendNotificationAsync(BabaStr.InitFile, context);
     await BABA.sendNotificationAsync(BabaStr.InitEnv, context);
     await BABA.sendNotificationAsync(BabaStr.InitLoginStatus);

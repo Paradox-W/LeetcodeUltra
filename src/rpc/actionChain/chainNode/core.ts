@@ -31,6 +31,19 @@ class CorePlugin extends ChainNodeBase {
     super();
   }
 
+  private cleanCodeTemplate(code: string, lang: string): string {
+    let normalized = String(code || "").replace(/\r\n/g, "\n");
+    if (lang !== "cpp") {
+      return normalized;
+    }
+
+    normalized = normalized.replace(/^(\s*(?:\/\/[^\n]*\n|\/\*\*[\s\S]*?\*\/\s*))+(?=\s*(?:class|struct)\s+Solution\b)/, "");
+    normalized = normalized.replace(/^\s*\/\*\*[\s\S]*?\*\/\s*/gm, (block) => {
+      return /Definition for|The .* API is defined|Forward declaration/i.test(block) ? "" : block;
+    });
+    return normalized.replace(/^\n+/, "");
+  }
+
   /* It's a method that filters the problems. */
   filterProblems = (opts, cb) => {
     this.getProblems(!opts.dontTranslate, function (e, problems) {
@@ -93,7 +106,7 @@ class CorePlugin extends ChainNodeBase {
     data.app = configUtils.app || "leetcode";
     if (!data.fid) data.fid = data.id;
     if (!data.lang) data.lang = opts.lang;
-    data.code = (opts.code || data.code || "").replace(/\r\n/g, "\n");
+    data.code = this.cleanCodeTemplate(opts.code || data.code || "", data.lang);
     data.comment = storageUtils.getCommentStyleByLanguage(data.lang);
     data.percent = data.percent.toFixed(2);
     data.testcase = util.inspect(data.testcase || "");

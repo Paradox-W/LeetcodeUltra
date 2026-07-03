@@ -39,11 +39,48 @@ import { storageUtils } from "../rpc/utils/storageUtils";
 class TreeViewController {
     constructor() {
         this.searchSet = new Map();
+        this.cppIntelliSenseConfiguredWorkspaces = new Set();
         this.configurationChangeListener = vscode_1.workspace.onDidChangeConfiguration((event) => {
             if (event.affectsConfiguration("leetcode-problem-rating.hideScore")) {
                 BABA_1.BABA.sendNotification(BABA_1.BabaStr.ConfigChange_hideScore);
             }
         }, this);
+    }
+    ensureCppIntelliSenseForDocument(document) {
+        try {
+            if (!document || document.uri.scheme !== "file") {
+                return false;
+            }
+            const meta = (0, problemUtils_1.fileMeta)(document.getText());
+            if (!meta || meta.lang !== "cpp") {
+                return false;
+            }
+            const workspaceFolder = this.resolveIntelliSenseWorkspaceFolder(document);
+            if (!workspaceFolder) {
+                return false;
+            }
+            const definitionPath = this.writeCppDefinitionFile(workspaceFolder);
+            this.ensureCppIntelliSenseConfig(workspaceFolder, definitionPath);
+            if (!this.cppIntelliSenseConfiguredWorkspaces.has(workspaceFolder)) {
+                this.cppIntelliSenseConfiguredWorkspaces.add(workspaceFolder);
+                this.refreshCppLanguageServices();
+            }
+            return true;
+        }
+        catch (_) {
+            return false;
+        }
+    }
+    resolveIntelliSenseWorkspaceFolder(document) {
+        const containingWorkspace = vscode.workspace.getWorkspaceFolder(document.uri);
+        if (containingWorkspace) {
+            return containingWorkspace.uri.fsPath;
+        }
+        const configuredWorkspace = (0, ConfigUtils_1.getWorkspaceFolder)();
+        if (configuredWorkspace && fs.existsSync(configuredWorkspace)) {
+            return configuredWorkspace;
+        }
+        return path.dirname(document.fileName);
     }
     inferWorkbenchRunMode(tsd) {
         if (!tsd) {
@@ -608,6 +645,7 @@ class TreeViewController {
                 if (language === "cpp") {
                     const definitionPath = this.writeCppDefinitionFile(workspaceFolder);
                     this.ensureCppIntelliSenseConfig(workspaceFolder, definitionPath);
+                    this.refreshCppLanguageServices();
                 }
                 if (storageUtils.readProblemCases(filePath, node.id || node.fid || node.qid).length > 0) {
                     return;
@@ -629,24 +667,31 @@ class TreeViewController {
     }
     writeCppDefinitionFile(workspaceFolder) {
         const definitionPath = path.join(workspaceFolder, ".lcpr_data", "cpp", "leetcode-definition.hpp");
-        if (fs.existsSync(definitionPath)) {
-            return definitionPath;
-        }
         fse.ensureDirSync(path.dirname(definitionPath));
         fs.writeFileSync(definitionPath, [
             "#pragma once",
             "#include <algorithm>",
             "#include <array>",
+            "#include <cassert>",
             "#include <bitset>",
+            "#include <cctype>",
             "#include <climits>",
             "#include <cmath>",
+            "#include <cstddef>",
+            "#include <cstdlib>",
+            "#include <cstring>",
             "#include <deque>",
             "#include <functional>",
+            "#include <iomanip>",
             "#include <iostream>",
+            "#include <limits>",
             "#include <list>",
             "#include <map>",
+            "#include <memory>",
+            "#include <numeric>",
             "#include <queue>",
             "#include <set>",
+            "#include <sstream>",
             "#include <stack>",
             "#include <string>",
             "#include <tuple>",
@@ -673,10 +718,62 @@ class TreeViewController {
             "    TreeNode(int x, TreeNode *left, TreeNode *right) : val(x), left(left), right(right) {}",
             "};",
             "",
+            "class Node {",
+            "public:",
+            "    int val;",
+            "    Node *next;",
+            "    Node *random;",
+            "    Node *left;",
+            "    Node *right;",
+            "    vector<Node *> neighbors;",
+            "    vector<Node *> children;",
+            "    Node() : val(0), next(nullptr), random(nullptr), left(nullptr), right(nullptr) {}",
+            "    explicit Node(int _val) : val(_val), next(nullptr), random(nullptr), left(nullptr), right(nullptr) {}",
+            "    Node(int _val, vector<Node *> _neighbors) : val(_val), next(nullptr), random(nullptr), left(nullptr), right(nullptr), neighbors(_neighbors) {}",
+            "    Node(int _val, Node *_next, Node *_random) : val(_val), next(_next), random(_random), left(nullptr), right(nullptr) {}",
+            "    Node(int _val, Node *_left, Node *_right, Node *_next) : val(_val), next(_next), random(nullptr), left(_left), right(_right) {}",
+            "};",
+            "",
+            "class NestedInteger {",
+            "public:",
+            "    NestedInteger();",
+            "    NestedInteger(int value);",
+            "    bool isInteger() const;",
+            "    int getInteger() const;",
+            "    void setInteger(int value);",
+            "    void add(const NestedInteger &ni);",
+            "    const vector<NestedInteger> &getList() const;",
+            "};",
+            "",
+            "class MountainArray {",
+            "public:",
+            "    int get(int index);",
+            "    int length();",
+            "};",
+            "",
+            "class Master {",
+            "public:",
+            "    int guess(string word);",
+            "};",
+            "",
+            "bool isBadVersion(int version);",
+            "int guess(int num);",
+            "bool knows(int a, int b);",
+            "",
         ].join("\n"));
         return definitionPath;
     }
     ensureCppIntelliSenseConfig(workspaceFolder, definitionPath) {
+        try {
+            this.ensureCppToolsProperties(workspaceFolder, definitionPath);
+            this.ensureCppToolsSettings(workspaceFolder, definitionPath);
+            this.ensureClangdConfig(workspaceFolder, definitionPath);
+        }
+        catch (_) {
+            // Keep source generation independent from local C++ extension settings.
+        }
+    }
+    ensureCppToolsProperties(workspaceFolder, definitionPath) {
         try {
             const vscodeDir = path.join(workspaceFolder, ".vscode");
             const configPath = path.join(vscodeDir, "c_cpp_properties.json");
@@ -703,6 +800,10 @@ class TreeViewController {
             }
             let changed = false;
             config.configurations.forEach((item) => {
+                if (!Array.isArray(item.includePath)) {
+                    item.includePath = ["${workspaceFolder}/**"];
+                    changed = true;
+                }
                 if (!Array.isArray(item.forcedInclude)) {
                     item.forcedInclude = [];
                     changed = true;
@@ -711,14 +812,87 @@ class TreeViewController {
                     item.forcedInclude.push(definitionPath);
                     changed = true;
                 }
+                if (item.configurationProvider && item.mergeConfigurations !== true) {
+                    item.mergeConfigurations = true;
+                    changed = true;
+                }
+                if (!item.cppStandard) {
+                    item.cppStandard = "c++17";
+                    changed = true;
+                }
             });
             if (changed || !fs.existsSync(configPath)) {
                 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
             }
         }
         catch (_) {
-            // Keep source generation independent from local C++ extension settings.
+            // Invalid user JSON should not block opening a problem.
         }
+    }
+    ensureCppToolsSettings(workspaceFolder, definitionPath) {
+        try {
+            const vscodeDir = path.join(workspaceFolder, ".vscode");
+            const settingsPath = path.join(vscodeDir, "settings.json");
+            fse.ensureDirSync(vscodeDir);
+            let settings = {};
+            if (fs.existsSync(settingsPath)) {
+                settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+            }
+            const key = "C_Cpp.default.forcedInclude";
+            const forcedInclude = Array.isArray(settings[key]) ? settings[key] : [];
+            let changed = !Array.isArray(settings[key]);
+            if (forcedInclude.indexOf(definitionPath) < 0) {
+                forcedInclude.push(definitionPath);
+                changed = true;
+            }
+            settings[key] = forcedInclude;
+            if (!settings["C_Cpp.default.cppStandard"]) {
+                settings["C_Cpp.default.cppStandard"] = "c++17";
+                changed = true;
+            }
+            if (changed || !fs.existsSync(settingsPath)) {
+                fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+            }
+        }
+        catch (_) {
+            // Invalid user JSON should not block opening a problem.
+        }
+    }
+    ensureClangdConfig(workspaceFolder, definitionPath) {
+        try {
+            const clangdPath = path.join(workspaceFolder, ".clangd");
+            const start = "# LCPR_LEETCODEULTRA_START";
+            const end = "# LCPR_LEETCODEULTRA_END";
+            const fragment = [
+                start,
+                "---",
+                "If:",
+                "  PathMatch: .*\\.(cpp|cc|cxx|hpp|h)$",
+                "CompileFlags:",
+                "  Add:",
+                `    - ${JSON.stringify("-include")}`,
+                `    - ${JSON.stringify(definitionPath)}`,
+                `    - ${JSON.stringify("-std=c++17")}`,
+                end,
+                "",
+            ].join("\n");
+            let content = fs.existsSync(clangdPath) ? fs.readFileSync(clangdPath, "utf8") : "";
+            const markerRegExp = new RegExp(`${start}[\\s\\S]*?${end}\\n?`, "m");
+            if (markerRegExp.test(content)) {
+                content = content.replace(markerRegExp, fragment);
+            }
+            else {
+                content = `${content.replace(/\s*$/g, "")}${content.trim() ? "\n\n" : ""}${fragment}`;
+            }
+            fs.writeFileSync(clangdPath, content);
+        }
+        catch (_) {
+            // .clangd is best-effort because users may maintain their own config.
+        }
+    }
+    refreshCppLanguageServices() {
+        vscode.commands.executeCommand("C_Cpp.RescanWorkspace").then(undefined, () => undefined);
+        vscode.commands.executeCommand("clangd.restart").then(undefined, () => undefined);
     }
     pickOne() {
         return __awaiter(this, void 0, void 0, function* () {

@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+.codegraph/**
 out/test/**
 test/**
 src/**

@@ -51,7 +51,7 @@ class TreeViewController {
             if (!document || document.uri.scheme !== "file") {
                 return false;
             }
-            const meta = (0, problemUtils_1.fileMeta)(document.getText());
+            const meta = (0, problemUtils_1.fileMeta)(document.getText(), document.fileName);
             if (!meta || meta.lang !== "cpp") {
                 return false;
             }
@@ -647,6 +647,12 @@ class TreeViewController {
                     this.ensureCppIntelliSenseConfig(workspaceFolder, definitionPath);
                     this.refreshCppLanguageServices();
                 }
+                storageUtils.writeProblemMeta(filePath, {
+                    app: "leetcode",
+                    id: node.id || node.fid || node.qid,
+                    fid: node.fid || node.id || node.qid,
+                    lang: language,
+                }, workspaceFolder);
                 if (storageUtils.readProblemCases(filePath, node.id || node.fid || node.qid).length > 0) {
                     return;
                 }

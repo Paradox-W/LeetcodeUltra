@@ -309,7 +309,7 @@ class DebugService {
   }
 
   public get_one_case(document: vscode.TextDocument) {
-    const meta = fileMeta(document.getText());
+    const meta = fileMeta(document.getText(), document.fileName);
     if (meta && meta.id) {
       const storedCases = storageUtils.readProblemCases(document.fileName, meta.id);
       if (storedCases.length > 0) {
@@ -357,6 +357,7 @@ class DebugService {
       `\n`,
     ];
 
+    let inserted = false;
     for (let i: number = 0; i < document.lineCount; i++) {
       const lineContent: string = document.lineAt(i).text;
 
@@ -368,7 +369,17 @@ class DebugService {
           const updatedDocument = await vscode.workspace.openTextDocument(document.uri);
           await updatedDocument.save();
         }
+        inserted = true;
         break;
+      }
+    }
+    if (!inserted) {
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(document.uri, new vscode.Position(document.lineCount, 0), div_debug_arg.join("\n"));
+      const success = await vscode.workspace.applyEdit(edit);
+      if (success) {
+        const updatedDocument = await vscode.workspace.openTextDocument(document.uri);
+        await updatedDocument.save();
       }
     }
   }
@@ -380,7 +391,7 @@ class DebugService {
         return;
       }
       const fileContent: Buffer = fs.readFileSync(filePath);
-      let meta: ProblemMeta | null = fileMeta(fileContent.toString());
+      let meta: ProblemMeta | null = fileMeta(fileContent.toString(), filePath);
 
       if (meta == undefined) {
         ShowMessage("无法识别当前力扣题目文件，缺少 @lc 元信息。", OutPutType.error);
@@ -427,7 +438,7 @@ class DebugService {
           ShowMessage("调试参数区未生成或不完整，无法开始调试。", OutPutType.error);
           return;
         }
-        meta = fileMeta(document.getText());
+        meta = fileMeta(document.getText(), document.fileName);
         if (meta == undefined) {
           ShowMessage("无法识别当前力扣题目文件，缺少 @lc 元信息。", OutPutType.error);
           return;

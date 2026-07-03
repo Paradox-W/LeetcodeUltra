@@ -18,12 +18,12 @@ import {
   Range,
   Disposable,
   window,
-  Position,
 } from "vscode";
 
 import { remarkDao } from "../dao/remarkDao";
 import { RemarkComment } from "../model/ConstDefind";
-import { includeTemplatesAuto, getIncludeTemplate } from "../utils/ConfigUtils";
+import { includeTemplatesAuto } from "../utils/ConfigUtils";
+import { fileMeta } from "../utils/problemUtils";
 import { BABAMediator, BABAProxy, BaseCC, BabaStr, BABA } from "../BABA";
 
 class RemarkService implements Disposable {
@@ -31,15 +31,12 @@ class RemarkService implements Disposable {
   private _qid_map_thread: Map<string, CommentThread>;
 
   getQidByDocument(document: TextDocument) {
-    const content: string = document.getText();
-    const matchResult: RegExpMatchArray | null = content.match(
-      /@lc app=(.*) id=(.*|\w*|\W*|[\\u4e00-\\u9fa5]*) lang=(.*)/
-    );
     let result: Map<string, string> = new Map<string, string>();
-    if (!matchResult) {
+    const meta = fileMeta(document.getText(), document.fileName);
+    if (!meta || !meta.id) {
       return result;
     }
-    const fid: string | undefined = matchResult[2];
+    const fid: string | undefined = meta.id;
     let qid: string | undefined = BABA.getProxy(BabaStr.QuestionDataProxy).getQidByFid(fid);
     result["fid"] = fid;
     if (qid != undefined) {
@@ -59,42 +56,7 @@ class RemarkService implements Disposable {
     };
   }
 
-  public async includeTemplates(document: TextDocument) {
-    const content: string = document.getText();
-    const matchResult: RegExpMatchArray | null = content.match(
-      /@lc app=(.*) id=(.*|\w*|\W*|[\\u4e00-\\u9fa5]*) lang=(.*)/
-    );
-    if (!matchResult || !matchResult[3]) {
-      return undefined;
-    }
-    for (let i: number = 0; i < document.lineCount; i++) {
-      const lineContent: string = document.lineAt(i).text;
-      // 有了就不添加了
-      if (lineContent.indexOf("@lcpr-template-start") >= 0) {
-        break;
-      }
-
-      if (lineContent.indexOf("@lc code=start") >= 0) {
-        const editor = window.activeTextEditor;
-
-        await new Promise(async (resolve, _) => {
-          editor
-            ?.edit((edit) => {
-              edit.insert(new Position(i - 1, i - 1), getIncludeTemplate(matchResult[3]));
-            })
-            .then((success) => {
-              if (success) {
-                editor.document.save().then(() => {
-                  resolve(1);
-                });
-              } else {
-                resolve(1);
-              }
-            });
-        });
-        break;
-      }
-    }
+  public async includeTemplates(_document: TextDocument) {
     return undefined;
   }
 
@@ -109,21 +71,23 @@ class RemarkService implements Disposable {
       this._qid_map_thread.delete(docInfo["qid"]);
     }
     let oldRemark = await this.getOldThreadRemarkByQid(docInfo["qid"]);
+    let remarkLine = 0;
     for (let i: number = 0; i < document.lineCount; i++) {
       const lineContent: string = document.lineAt(i).text;
       if (lineContent.indexOf("@lc code=start") >= 0) {
-        let newRemark = this._remarkComment.createCommentThread(document.uri, new Range(i - 1, 0, i - 1, 0), oldRemark);
-        newRemark.comments.forEach((element) => {
-          element.parent = newRemark;
-        });
-
-        newRemark.contextValue = `qid=${docInfo["qid"]}`;
-        newRemark.label = `${docInfo["fid"]}`;
-        newRemark.collapsibleState = CommentThreadCollapsibleState.Expanded;
-        this._qid_map_thread.set(docInfo["qid"], newRemark);
+        remarkLine = Math.max(i - 1, 0);
         break;
       }
     }
+    let newRemark = this._remarkComment.createCommentThread(document.uri, new Range(remarkLine, 0, remarkLine, 0), oldRemark);
+    newRemark.comments.forEach((element) => {
+      element.parent = newRemark;
+    });
+
+    newRemark.contextValue = `qid=${docInfo["qid"]}`;
+    newRemark.label = `${docInfo["fid"]}`;
+    newRemark.collapsibleState = CommentThreadCollapsibleState.Expanded;
+    this._qid_map_thread.set(docInfo["qid"], newRemark);
   }
 
   public remarkCreateNote(reply: CommentReply) {

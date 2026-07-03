@@ -337,7 +337,9 @@ class CppLeetCodePluginBridge {
   }
 
   private findEntryLine(document: vscode.TextDocument): number {
-    let inCode = false;
+    const textContent = document.getText();
+    const hasCodeMarkers = textContent.indexOf("@lc code=start") >= 0 && textContent.indexOf("@lc code=end") >= 0;
+    let inCode = !hasCodeMarkers;
     let inFunction = false;
     let bodyOpen = false;
     let depth = 0;

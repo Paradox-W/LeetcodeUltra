@@ -28,10 +28,10 @@ export class DebugPy3 {
       program: "",
     };
     const fileContent: Buffer = await fse.readFile(filePath);
-    const meta: { id: string; lang: string } | null = fileMeta(fileContent.toString());
+    const meta: { id: string; lang: string } | null = fileMeta(fileContent.toString(), filePath);
     if (meta == null) {
       ShowMessage(
-        "File meta info has been changed, please check the content: '@lc app=leetcode.cn id=xx lang=xx'.",
+        "无法识别当前力扣题目元信息。",
         OutPutType.error
       );
       return;

@@ -2,6 +2,7 @@ import * as fse from "fs-extra";
 import * as path from "path";
 import * as vscode from "vscode";
 
+import { storageUtils } from "../rpc/utils/storageUtils";
 import { useWsl, isWindows, usingCmd } from "./SystemUtils";
 
 const beforeStubReg: RegExp = /@lcpr-before-debug-begin([\s\S]*?)@lcpr-before-debug-end/;
@@ -114,15 +115,30 @@ export function genFileExt(language: string): string {
   return ext;
 }
 
-export function fileMeta(content: string): ProblemMeta | null {
-  const result: RegExpExecArray | null = /@lc app=(.*) id=(.*|\w*|\W*|[\\u4e00-\\u9fa5]*) lang=(.*)/.exec(content);
-  if (result != null) {
+export function fileMeta(content: string, filePath?: string): ProblemMeta | null {
+  const stored = filePath ? storageUtils.readProblemMeta(filePath) : null;
+  if (stored && stored.id && stored.lang) {
     return {
-      id: result[2],
-      lang: result[3],
+      id: stored.id,
+      lang: stored.lang,
+    };
+  }
+
+  const parsed = storageUtils.parseProblemMetaFromText(content);
+  if (parsed.id && parsed.lang) {
+    return {
+      id: parsed.id,
+      lang: parsed.lang,
     };
   }
   return null;
+}
+
+export function fileMetaFromDocument(document: vscode.TextDocument): ProblemMeta | null {
+  if (!document || document.uri.scheme !== "file") {
+    return null;
+  }
+  return fileMeta(document.getText(), document.fileName);
 }
 
 export async function getUnstubedFile(filePath: string): Promise<string> {
@@ -134,10 +150,10 @@ export async function getUnstubedFile(filePath: string): Promise<string> {
     return filePath;
   }
 
-  const meta: { id: string; lang: string } | null = fileMeta(content);
+  const meta: { id: string; lang: string } | null = fileMeta(content, filePath);
   if (meta == null) {
     vscode.window.showErrorMessage(
-      "File meta info has been changed, please check the content: '@lc app=leetcode.cn id=xx lang=xx'."
+      "无法识别当前力扣题目元信息。"
     );
     throw new Error("");
   }

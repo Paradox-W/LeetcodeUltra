@@ -19,6 +19,7 @@ export interface IMETA {
   fid: string;
   lang: string;
   writeCase: Array<any>;
+  app?: string;
 }
 
 //Object.assign({}, defaultMETA, {})
@@ -327,6 +328,114 @@ class StorageUtils {
     return data;
   }
 
+  private safeSidecarKey(value) {
+    return encodeURIComponent(String(value || "unknown").replace(/\\/g, "/")).replace(/%/g, "_");
+  }
+
+  private sidecarRelativeKey(filename, root) {
+    const relative = path.relative(root, filename);
+    return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(filename);
+  }
+
+  public problemMetaFile(filename, preferredRoot?) {
+    if (preferredRoot) {
+      return path.join(
+        preferredRoot,
+        ".lcpr_data",
+        "problem-meta",
+        `${this.safeSidecarKey(this.sidecarRelativeKey(filename, preferredRoot))}.json`
+      );
+    }
+
+    let dir = path.dirname(filename);
+    while (dir && dir !== path.dirname(dir)) {
+      const candidate = path.join(
+        dir,
+        ".lcpr_data",
+        "problem-meta",
+        `${this.safeSidecarKey(this.sidecarRelativeKey(filename, dir))}.json`
+      );
+      if (this.exist(candidate)) {
+        return candidate;
+      }
+
+      const basenameCandidate = path.join(
+        dir,
+        ".lcpr_data",
+        "problem-meta",
+        `${this.safeSidecarKey(path.basename(filename))}.json`
+      );
+      if (this.exist(basenameCandidate)) {
+        return basenameCandidate;
+      }
+      dir = path.dirname(dir);
+    }
+
+    return path.join(path.dirname(filename), ".lcpr_data", "problem-meta", `${this.safeSidecarKey(path.basename(filename))}.json`);
+  }
+
+  public readProblemMeta(filename) {
+    const metaFile = this.problemMetaFile(filename);
+    if (!this.exist(metaFile)) {
+      return Object.assign({}, defaultMETA, {});
+    }
+    try {
+      const data = JSON.parse(this.getData(metaFile));
+      return Object.assign({}, defaultMETA, {
+        app: data.app || "",
+        id: data.id || data.fid || "",
+        fid: data.fid || data.id || "",
+        lang: data.lang || "",
+      });
+    } catch (_) {
+      return Object.assign({}, defaultMETA, {});
+    }
+  }
+
+  public writeProblemMeta(filename, meta, preferredRoot?) {
+    const normalized = Object.assign({}, defaultMETA, {
+      app: meta?.app || "",
+      id: meta?.id || meta?.fid || "",
+      fid: meta?.fid || meta?.id || "",
+      lang: meta?.lang || "",
+    });
+    if (!normalized.id || !normalized.lang) {
+      return normalized;
+    }
+
+    const metaFile = this.problemMetaFile(filename, preferredRoot);
+    this.mkdir(path.dirname(metaFile));
+    this.write(
+      metaFile,
+      JSON.stringify(
+        {
+          app: normalized.app,
+          id: normalized.id,
+          fid: normalized.fid,
+          lang: normalized.lang,
+          file: preferredRoot ? this.sidecarRelativeKey(filename, preferredRoot) : path.basename(filename),
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      )
+    );
+    return normalized;
+  }
+
+  public parseProblemMetaFromText(content) {
+    const match = String(content || "").match(/@lc\s+app=([^\s]+)\s+id=([\s\S]*?)\s+lang=([^\s]+)/);
+    if (!match) {
+      return Object.assign({}, defaultMETA, {});
+    }
+    return Object.assign({}, defaultMETA, {
+      app: match[1].trim(),
+      id: match[2].trim(),
+      fid: match[2].trim(),
+      lang: match[3].trim(),
+    });
+  }
+
   public safeProblemId(problemId) {
     return encodeURIComponent(String(problemId || "unknown")).replace(/%/g, "_");
   }
@@ -580,22 +689,23 @@ class StorageUtils {
   public meta(filename) {
     const m = Object.assign({}, defaultMETA, {});
 
-    const content = this.getData(filename);
+    const content = this.getData(filename) || "";
     let file_info = content.split("\n");
 
     let temp_test: Array<any> = this.extractCaseAnnotationsFromText(content);
+    const storedMeta = this.readProblemMeta(filename);
+    if (storedMeta.id && storedMeta.lang) {
+      Object.assign(m, storedMeta);
+    }
 
     for (let all_input = 0; all_input < file_info.length; all_input++) {
       const lineContent = file_info[all_input];
-      if (lineContent.indexOf(" @lc app=") >= 0) {
-        // @lc app=leetcode.cn id=剑指 Offer II 116 lang=cpp
-        let id_right = lineContent.split("id=")[1];
-        let lang_cat = id_right.split("lang=");
-        let id = lang_cat[0].trim();
-        let lang = lang_cat[1].trim();
-        m.id = id;
-        m.fid = id;
-        m.lang = lang;
+      if (lineContent.indexOf("@lc app=") >= 0) {
+        const parsedMeta = this.parseProblemMetaFromText(lineContent);
+        if (parsedMeta.id && parsedMeta.lang) {
+          Object.assign(m, parsedMeta);
+          this.writeProblemMeta(filename, parsedMeta);
+        }
       }
       m.writeCase = temp_test;
     }

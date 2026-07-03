@@ -64,7 +64,7 @@ export function genFileName(node: TreeNodeModel, language: string): string {
 
 export async function getNodeIdFromFile(fsPath: string): Promise<string> {
   const fileContent: Buffer = fs.readFileSync(fsPath);
-  const meta: ProblemMeta | null = fileMeta(fileContent.toString());
+  const meta: ProblemMeta | null = fileMeta(fileContent.toString(), fsPath);
 
   let id = meta?.id;
   // Try to get id from file name if getting from comments failed

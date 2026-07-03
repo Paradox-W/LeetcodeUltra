@@ -102,10 +102,10 @@ export class DebugCpp {
   ): Promise<string | undefined> {
     const sourceFileContent: string = (await fse.readFile(filePath)).toString();
     const debugSourceFileContent: string = this.stripLeetCodeTemplateBlock(sourceFileContent);
-    const meta: { id: string; lang: string } | null = fileMeta(sourceFileContent);
+    const meta: { id: string; lang: string } | null = fileMeta(sourceFileContent, filePath);
     if (meta == null) {
       ShowMessage(
-        "File meta info has been changed, please check the content: '@lc app=leetcode.cn id=xx lang=xx'.",
+        "无法识别当前力扣题目元信息。",
         OutPutType.error
       );
       return;

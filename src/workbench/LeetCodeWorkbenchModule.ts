@@ -37,7 +37,7 @@ class LeetCodeWorkbenchProvider {
             this.refresh();
             return;
         }
-        const meta = (0, problemUtils_1.fileMeta)(editor.document.getText());
+        const meta = (0, problemUtils_1.fileMeta)(editor.document.getText(), editor.document.fileName);
         if (!meta || !meta.id) {
             vscode.window.showWarningMessage("无法在当前文件中找到力扣题号。");
             this.refresh();
@@ -153,10 +153,11 @@ class LeetCodeWorkbenchProvider {
         }
     }
     isLeetCodeDocument(document) {
-        return /@lc app=.* id=.* lang=.*/.test(document.getText());
+        const meta = (0, problemUtils_1.fileMeta)(document.getText(), document.fileName);
+        return !!(meta && meta.id && meta.lang);
     }
     getProblemTitle(text, fileName) {
-        const meta = (0, problemUtils_1.fileMeta)(text);
+        const meta = (0, problemUtils_1.fileMeta)(text, fileName);
         if (meta && meta.id) {
             try {
                 const questionMap = this.baba.getProxy(this.babaStr.QuestionDataProxy).getfidMapQuestionData();
@@ -201,7 +202,7 @@ class LeetCodeWorkbenchProvider {
         };
     }
     readCases(editor, text) {
-        const meta = (0, problemUtils_1.fileMeta)(text);
+        const meta = (0, problemUtils_1.fileMeta)(text, editor.document.fileName);
         if (!meta || !meta.id) {
             return this.parseCases(text);
         }
@@ -298,7 +299,7 @@ class LeetCodeWorkbenchProvider {
                 return;
             }
             const document = editor.document;
-            const meta = (0, problemUtils_1.fileMeta)(document.getText());
+            const meta = (0, problemUtils_1.fileMeta)(document.getText(), document.fileName);
             if (!meta || !meta.id) {
                 vscode.window.showWarningMessage("无法在当前文件中找到力扣题号。");
                 resolve(undefined);

@@ -1,6 +1,8 @@
 // @ts-nocheck
 import * as vscode from "vscode";
 import * as fse from "fs-extra";
+import * as http from "http";
+import * as https from "https";
 import * as path from "path";
 import * as hljs from "highlight.js";
 import * as ConstDefind_1 from "../model/ConstDefind";
@@ -14,6 +16,7 @@ class LeetCodeCompanionProvider {
         this.context = context;
         this.view = undefined;
         this.descriptionRequestSeq = 0;
+        this.problemImageDataCache = new Map();
         this.state = {
             activeTab: "empty",
             description: undefined,
@@ -672,6 +675,9 @@ body .submission-code code.hljs .hljs-strong {
             case "switchDescriptionLanguage":
                 this.switchDescriptionMode(message.mode);
                 break;
+            case "loadProblemImageData":
+                this.loadProblemImageData(message.requestId, message.src);
+                break;
             case "saveSubmissionNote":
                 this.saveSubmissionNote(message.id, message.text);
                 break;
@@ -686,6 +692,117 @@ body .submission-code code.hljs .hljs-strong {
             default:
                 break;
         }
+    }
+    normalizeRemoteImageUrl(src) {
+        const value = String(src || "").trim();
+        if (!value) {
+            return "";
+        }
+        const withProtocol = value.startsWith("//") ? `https:${value}` : value;
+        try {
+            const url = new URL(withProtocol);
+            if (url.protocol !== "https:" && url.protocol !== "http:") {
+                return "";
+            }
+            return url.toString();
+        }
+        catch (_) {
+            return "";
+        }
+    }
+    async loadProblemImageData(requestId, src) {
+        const id = String(requestId || "");
+        const url = this.normalizeRemoteImageUrl(src);
+        if (!id || !this.view) {
+            return;
+        }
+        if (!url) {
+            this.view.webview.postMessage({ command: "problemImageData", requestId: id, src: String(src || ""), ok: false });
+            return;
+        }
+        try {
+            let dataUri = this.problemImageDataCache.get(url);
+            if (!dataUri) {
+                const image = await this.downloadRemoteImage(url);
+                const mime = image.contentType && /^image\//i.test(image.contentType) ? image.contentType : "image/png";
+                dataUri = `data:${mime};base64,${image.buffer.toString("base64")}`;
+                this.problemImageDataCache.set(url, dataUri);
+                if (this.problemImageDataCache.size > 60) {
+                    const firstKey = this.problemImageDataCache.keys().next().value;
+                    if (firstKey) {
+                        this.problemImageDataCache.delete(firstKey);
+                    }
+                }
+            }
+            this.view.webview.postMessage({ command: "problemImageData", requestId: id, src: url, ok: true, dataUri });
+        }
+        catch (error) {
+            if (this.view) {
+                this.view.webview.postMessage({
+                    command: "problemImageData",
+                    requestId: id,
+                    src: url,
+                    ok: false,
+                    error: error && error.message ? error.message : String(error || "图片读取失败"),
+                });
+            }
+        }
+    }
+    downloadRemoteImage(urlString, redirects = 0) {
+        return new Promise((resolve, reject) => {
+            let url;
+            try {
+                url = new URL(urlString);
+            }
+            catch (error) {
+                reject(error);
+                return;
+            }
+            const client = url.protocol === "http:" ? http : https;
+            const request = client.get(url, {
+                headers: {
+                    "User-Agent": "LeetcodeUltra/3.2.4",
+                    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                },
+            }, (response) => {
+                const status = response.statusCode || 0;
+                const location = response.headers.location;
+                if (status >= 300 && status < 400 && location) {
+                    response.resume();
+                    if (redirects >= 4) {
+                        reject(new Error("图片重定向次数过多"));
+                        return;
+                    }
+                    const nextUrl = new URL(location, url).toString();
+                    this.downloadRemoteImage(nextUrl, redirects + 1).then(resolve, reject);
+                    return;
+                }
+                if (status < 200 || status >= 300) {
+                    response.resume();
+                    reject(new Error(`图片读取失败: HTTP ${status}`));
+                    return;
+                }
+                const chunks = [];
+                let total = 0;
+                const maxBytes = 8 * 1024 * 1024;
+                response.on("data", (chunk) => {
+                    total += chunk.length;
+                    if (total > maxBytes) {
+                        request.destroy(new Error("图片过大"));
+                        return;
+                    }
+                    chunks.push(chunk);
+                });
+                response.on("end", () => {
+                    resolve({
+                        buffer: Buffer.concat(chunks),
+                        contentType: String(response.headers["content-type"] || "").split(";")[0].trim(),
+                    });
+                });
+            });
+            request.setTimeout(12000, () => request.destroy(new Error("图片读取超时")));
+            request.on("error", reject);
+        });
     }
     getHtml(webviewView) {
         const webview = webviewView.webview;
@@ -881,6 +998,8 @@ body .submission-code code.hljs .hljs-strong {
         data[index + 2] = 255 - data[index + 2];
       }
     }
+    const imageDataRequests = new Map();
+    let imageDataRequestSeq = 0;
     function processBackgroundAwareImage(img, sourceImage, source) {
       const width = sourceImage.naturalWidth || sourceImage.width;
       const height = sourceImage.naturalHeight || sourceImage.height;
@@ -922,14 +1041,14 @@ body .submission-code code.hljs .hljs-strong {
         img.dataset.lcprBgProcessed = 'skipped';
       }
     }
-    function prepareBackgroundAwareImage(img) {
-      if (!img || img.dataset.lcprBgProcessed === 'pending' || img.dataset.lcprBgProcessed === 'done') return;
-      const source = img.dataset.lcprOriginalSrc || img.currentSrc || img.getAttribute('src') || '';
-      if (!source || source.startsWith('file:')) {
-        img.dataset.lcprBgProcessed = 'skipped';
-        return;
-      }
-      img.dataset.lcprBgProcessed = 'pending';
+    function processBackgroundAwareImageData(img, dataUri, source) {
+      const sourceImage = new Image();
+      sourceImage.decoding = 'async';
+      sourceImage.onload = () => processBackgroundAwareImage(img, sourceImage, source);
+      sourceImage.onerror = () => fallbackBackgroundAwareImage(img, source);
+      sourceImage.src = dataUri;
+    }
+    function fallbackBackgroundAwareImage(img, source) {
       const sourceImage = new Image();
       sourceImage.crossOrigin = 'anonymous';
       sourceImage.decoding = 'async';
@@ -939,6 +1058,36 @@ body .submission-code code.hljs .hljs-strong {
       };
       sourceImage.src = source;
     }
+    function prepareBackgroundAwareImage(img) {
+      if (!img || img.dataset.lcprBgProcessed === 'pending' || img.dataset.lcprBgProcessed === 'done') return;
+      const source = img.dataset.lcprOriginalSrc || img.currentSrc || img.getAttribute('src') || '';
+      if (!source || source.startsWith('file:')) {
+        img.dataset.lcprBgProcessed = 'skipped';
+        return;
+      }
+      img.dataset.lcprBgProcessed = 'pending';
+      if (source.startsWith('data:')) {
+        processBackgroundAwareImageData(img, source, source);
+        return;
+      }
+      const requestId = 'lcpr-image-' + (++imageDataRequestSeq);
+      imageDataRequests.set(requestId, { img, source });
+      vscode.postMessage({ command: 'loadProblemImageData', requestId, src: source });
+    }
+    window.addEventListener('message', (event) => {
+      const message = event.data || {};
+      if (message.command !== 'problemImageData') return;
+      const pending = imageDataRequests.get(message.requestId);
+      if (!pending) return;
+      imageDataRequests.delete(message.requestId);
+      const img = pending.img;
+      if (!img || !img.isConnected || img.dataset.lcprBgProcessed !== 'pending') return;
+      if (message.ok && message.dataUri) {
+        processBackgroundAwareImageData(img, message.dataUri, pending.source);
+      } else {
+        fallbackBackgroundAwareImage(img, pending.source);
+      }
+    });
     function applyBackgroundAwareImages() {
       document.querySelectorAll('img[data-lcpr-problem-image="true"]').forEach(prepareBackgroundAwareImage);
     }

@@ -148,6 +148,25 @@ export function usingCmd(): boolean {
   return false;
 }
 
+function showWorkbenchNotice(message: string): void {
+  try {
+    vscode.commands.executeCommand("lcpr.workbench.showResult", {
+      phase: "message",
+      tone: "tone-warning",
+      label: "提示",
+      message,
+      updatedAt: Date.now(),
+    });
+  } catch (_) {
+    // The workbench may not be registered yet.
+  }
+  try {
+    BABA.getProxy(BabaStr.LogOutputProxy).get_log().appendLine(`[warning] ${message}`);
+  } catch (_) {
+    // Logging is best-effort.
+  }
+}
+
 // 获取当前文件的路径
 /**
  * It returns the path of the currently active file, or undefined if there is no active file
@@ -168,7 +187,7 @@ export async function getTextEditorFilePathByUri(uri?: Uri): Promise<string | un
     return undefined;
   }
   if (textEditor.document.isDirty && !(await textEditor.document.save())) {
-    window.showWarningMessage("请先保存当前文件");
+    showWorkbenchNotice("请先保存当前文件");
     return undefined;
   }
   return useWsl() ? toWslPath(textEditor.document.uri.fsPath) : textEditor.document.uri.fsPath;

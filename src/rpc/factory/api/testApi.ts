@@ -37,6 +37,12 @@ class TestApi extends ApiBase {
         default: "",
         describe: "Provide test case",
       })
+      .option("b", {
+        alias: "testcaseBase64",
+        type: "string",
+        default: "",
+        describe: "Provide base64 encoded test case",
+      })
       .option("a", {
         alias: "allcase",
         type: "boolean",
@@ -105,6 +111,10 @@ class TestApi extends ApiBase {
             error: ["not testable? please submit directly!"],
           })
         );
+
+      if (argv.testcaseBase64) {
+        argv.testcase = Buffer.from(String(argv.testcaseBase64), "base64").toString("utf8");
+      }
 
       if (argv.testcase) {
         problem.testcase = argv.testcase.replace(/\\n/g, "\n");

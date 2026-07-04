@@ -22,6 +22,7 @@ import * as MarkdownService_1 from "../service/MarkdownService";
 import * as OutputUtils_1 from "../utils/OutputUtils";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
 import * as BABA_1 from "../BABA";
+import * as ConstDefind_1 from "../model/ConstDefind";
 class SubmissionService extends BaseWebviewService_1.BaseWebViewService {
     constructor() {
         super(...arguments);
@@ -76,11 +77,11 @@ class SubmissionService extends BaseWebviewService_1.BaseWebViewService {
             try {
                 const opened = yield vscode_1.env.openExternal(vscode_1.Uri.parse("raycast://confetti"));
                 if (!opened) {
-                    vscode_1.window.showWarningMessage("LeetCode AC celebration needs Raycast installed and its confetti URL handler enabled.");
+                    yield (0, OutputUtils_1.ShowMessage)("LeetCode AC celebration needs Raycast installed and its confetti URL handler enabled.", ConstDefind_1.OutPutType.warning);
                 }
             }
             catch (error) {
-                vscode_1.window.showWarningMessage("LeetCode AC celebration needs Raycast installed and its confetti URL handler enabled.");
+                yield (0, OutputUtils_1.ShowMessage)("LeetCode AC celebration needs Raycast installed and its confetti URL handler enabled.", ConstDefind_1.OutPutType.warning);
             }
         });
     }

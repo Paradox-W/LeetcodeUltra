@@ -19,7 +19,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 import * as fse from "fs-extra";
 import * as os from "os";
 import * as path from "path";
-import * as vscode_1 from "vscode";
 import * as vscode_2 from "vscode";
 import * as ConstDefind_1 from "../model/ConstDefind";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
@@ -373,24 +372,28 @@ class ExecuteService {
             }
         });
     }
+    encodeTestString(testString) {
+        return Buffer.from(String(testString || ""), "utf8").toString("base64");
+    }
     testSolution(filePath, testString, allCase) {
         return __awaiter(this, void 0, void 0, function* () {
             if (testString) {
+                const encodedTestString = this.encodeTestString(testString);
                 if (systemUtils.useVscodeNode()) {
                     return yield this.callWithMsg("正在提交代码~", this.nodeExecutable, [
                         yield this.getLeetCodeBinaryPath(),
                         "test",
                         `${filePath}`,
-                        "-t",
-                        `${testString}`,
+                        "-b",
+                        encodedTestString,
                     ]);
                 }
                 return yield this.callWithMsg("正在提交代码~", this.nodeExecutable, [
                     yield this.getLeetCodeBinaryPath(),
                     "test",
                     `"${filePath}"`,
-                    "-t",
-                    `${testString}`,
+                    "-b",
+                    encodedTestString,
                 ]);
             }
             if (allCase) {
@@ -478,7 +481,6 @@ class ExecuteService {
             (_a = child_process.stdout) === null || _a === void 0 ? void 0 : _a.on("data", (data) => __awaiter(this, void 0, void 0, function* () {
                 var _e, _f, _g;
                 data = data.toString();
-                // vscode.window.showInformationMessage(`cc login msg ${data}.`);
                 BABA_1.BABA.getProxy(BABA_1.BabaStr.LogOutputProxy).get_log().append(data);
                 if (data.includes("twoFactorCode")) {
                     const twoFactor = yield vscode_2.window.showInputBox({
@@ -606,20 +608,7 @@ class ExecuteService {
     }
     cCall(message, command, args, options = { shell: true }, procInitCallback, procInitCallbackArg) {
         return __awaiter(this, void 0, void 0, function* () {
-            let result = "";
-            yield vscode_2.window.withProgress({ location: vscode_1.ProgressLocation.Notification }, (p) => __awaiter(this, void 0, void 0, function* () {
-                return new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
-                    p.report({ message });
-                    try {
-                        result = yield (0, SystemUtils_2.sysCall)(command, args, options, procInitCallback, procInitCallbackArg);
-                        resolve();
-                    }
-                    catch (e) {
-                        reject(e);
-                    }
-                }));
-            }));
-            return result;
+            return yield (0, SystemUtils_2.sysCall)(command, args, options, procInitCallback, procInitCallbackArg);
         });
     }
     removeOldCache() {

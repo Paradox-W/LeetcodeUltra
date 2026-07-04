@@ -3,6 +3,8 @@ import { AiClient } from "../ai/AiClient";
 import { AiVariableAnalyzer } from "./AiVariableAnalyzer";
 import { AiDebugPanel, AiDebugViewModel } from "./AiDebugPanel";
 import { DapVariableCollector } from "./DapVariableCollector";
+import { OutPutType } from "../model/ConstDefind";
+import { ShowMessage } from "../utils/OutputUtils";
 
 function getConfig(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration("leetcode-problem-rating");
@@ -146,7 +148,7 @@ class AiDebugService {
       return;
     }
     await this.aiClient.storeApiKey(value);
-    vscode.window.showInformationMessage("AI 调试 API Key 已保存。");
+    await ShowMessage("AI 调试 API Key 已保存。", OutPutType.info);
   }
 
   private async toggleAiAnalysis(): Promise<void> {
@@ -154,7 +156,7 @@ class AiDebugService {
     const current = config.get<boolean>("aiDebug.enableAiAnalysis", true);
     await config.update("aiDebug.enableAiAnalysis", !current, vscode.ConfigurationTarget.Global);
     this.invalidateLastDocument();
-    vscode.window.showInformationMessage(!current ? "AI 调试自动分析已启用。" : "AI 调试自动分析已关闭。");
+    await ShowMessage(!current ? "AI 调试自动分析已启用。" : "AI 调试自动分析已关闭。", OutPutType.info);
   }
 
   private async setManualVariables(): Promise<void> {
@@ -173,7 +175,7 @@ class AiDebugService {
       .filter(Boolean);
     await getConfig().update("aiDebug.manualVariables", variables, vscode.ConfigurationTarget.Workspace);
     this.invalidateLastDocument();
-    vscode.window.showInformationMessage(variables.length ? `AI 调试手动变量已更新：${variables.join(", ")}` : "AI 调试手动变量已清空。");
+    await ShowMessage(variables.length ? `AI 调试手动变量已更新：${variables.join(", ")}` : "AI 调试手动变量已清空。", OutPutType.info);
   }
 
   private async setMaxVariables(): Promise<void> {
@@ -194,7 +196,7 @@ class AiDebugService {
     const maxVariables = Math.max(1, Math.min(12, Math.trunc(Number(value))));
     await getConfig().update("aiDebug.maxVariables", maxVariables, vscode.ConfigurationTarget.Global);
     this.invalidateLastDocument();
-    vscode.window.showInformationMessage(`AI 调试变量数量已设为 ${maxVariables}。`);
+    await ShowMessage(`AI 调试变量数量已设为 ${maxVariables}。`, OutPutType.info);
   }
 
   private async setVisualTheme(): Promise<void> {
@@ -214,7 +216,7 @@ class AiDebugService {
     if (this.panel.visible) {
       await this.analyzeAndShow(false);
     }
-    vscode.window.showInformationMessage(`AI 调试主题已切换为${picked.label}。`);
+    await ShowMessage(`AI 调试主题已切换为${picked.label}。`, OutPutType.info);
   }
 
   private formatManualVariables(items: any[]): string {

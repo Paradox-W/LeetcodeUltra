@@ -20,31 +20,26 @@ export async function promptHintMessage(
   config: string,
   message: string,
   choiceConfirm: string,
-  onConfirm: () => Promise<any>
+  _onConfirm: () => Promise<any>
 ): Promise<void> {
   if (getVsCodeConfig().get<boolean>(config)) {
-    const choiceNoShowAgain: string = "Don't show again";
-    const choice: string | undefined = await vscode.window.showInformationMessage(
-      message,
-      choiceConfirm,
-      choiceNoShowAgain
-    );
-    if (choice === choiceConfirm) {
-      await onConfirm();
-    } else if (choice === choiceNoShowAgain) {
-      await getVsCodeConfig().update(config, false, true /* UserSetting */);
-    }
+    appendLogMessage(`${message} ${choiceConfirm ? `(${choiceConfirm})` : ""}`.trim(), OutPutType.info);
   }
 }
 
 export async function promptForSignIn(): Promise<void> {
-  const choice: vscode.MessageItem | undefined = await vscode.window.showInformationMessage(
-    "Please sign in to LeetCode.",
-    DialogOptions.yes,
-    DialogOptions.no,
-    DialogOptions.singUp
+  const choice = await vscode.window.showQuickPick(
+    [
+      { label: "登录 LeetCode", value: DialogOptions.yes },
+      { label: "暂不登录", value: DialogOptions.no },
+      { label: "注册账号", value: DialogOptions.singUp },
+    ],
+    {
+      placeHolder: "请先登录 LeetCode",
+      ignoreFocusOut: true,
+    }
   );
-  switch (choice) {
+  switch (choice?.value) {
     case DialogOptions.yes:
       await vscode.commands.executeCommand("lcpr.signin");
       break;
@@ -64,10 +59,10 @@ export async function ShowMessage(message: string, type: OutPutType): Promise<vo
   let result: vscode.MessageItem | undefined;
   switch (type) {
     case OutPutType.info:
-      result = await vscode.window.showInformationMessage(message, DialogOptions.open, DialogOptions.no);
+      appendLogMessage(message, type);
       break;
     case OutPutType.warning:
-      result = await vscode.window.showWarningMessage(message, DialogOptions.open, DialogOptions.no);
+      appendLogMessage(message, type);
       break;
     case OutPutType.error:
       result = await vscode.window.showErrorMessage(message, DialogOptions.open, DialogOptions.no);
@@ -78,5 +73,13 @@ export async function ShowMessage(message: string, type: OutPutType): Promise<vo
 
   if (result === DialogOptions.open) {
     BABA.getProxy(BabaStr.LogOutputProxy).get_log().show();
+  }
+}
+
+function appendLogMessage(message: string, type: OutPutType): void {
+  try {
+    BABA.getProxy(BabaStr.LogOutputProxy).get_log().appendLine(`[${type}] ${message}`);
+  } catch (_) {
+    // Logging is best-effort; non-error notices should not interrupt the user.
   }
 }

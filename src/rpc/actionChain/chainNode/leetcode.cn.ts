@@ -386,6 +386,7 @@ function getSolutionBySlugData(question_slug: string, articles_slug: string, lan
       "      username",
       "      profile {",
       "        realName",
+      "        userSlug",
       "        __typename",
       "      }",
       "  __typename",
@@ -423,6 +424,7 @@ function getSolutionBySlugData(question_slug: string, articles_slug: string, lan
     solution_result.lang = lang;
     solution_result.author = solution.author?.username || "";
     solution_result.authorName = solution.author?.profile?.realName || solution.author?.username || "";
+    solution_result.authorSlug = solution.author?.profile?.userSlug || solution.author?.username || "";
     solution_result.views = solution.hitCount || "";
     solution_result.reactionType = solution.reactionType || "";
     solution_result.body = content;
@@ -531,6 +533,7 @@ function getSolutionArticles(question_slug: string, options: any, cb) {
       "       username",
       "       profile {",
       "         realName",
+      "         userSlug",
       "       }",
       "      }",
       "  byLeetcode",
@@ -556,6 +559,7 @@ function getSolutionArticles(question_slug: string, options: any, cb) {
         lang,
         author: node.author?.username || "",
         authorName: node.author?.profile?.realName || node.author?.username || "",
+        authorSlug: node.author?.profile?.userSlug || node.author?.username || "",
         views: node.hitCount || "",
         reactionType: node.reactionType || "",
         byLeetcode: !!node.byLeetcode,

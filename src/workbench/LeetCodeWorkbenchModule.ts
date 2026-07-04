@@ -35,6 +35,17 @@ class LeetCodeWorkbenchProvider {
         this.postState();
         this.ensureActivityLoaded();
     }
+    setPanelMessage(message, options = {}) {
+        this.currentResult = {
+            phase: "message",
+            tone: options.tone || "tone-neutral",
+            label: options.label || "提示",
+            message,
+            updatedAt: Date.now(),
+        };
+        this.currentState = this.readState();
+        this.postState();
+    }
     async ensureActivityLoaded(force = false) {
         if (!this.view) {
             return;
@@ -87,17 +98,16 @@ class LeetCodeWorkbenchProvider {
     async refreshOfficialCases() {
         const editor = this.getActiveEditor();
         if (!editor || !this.isLeetCodeDocument(editor.document)) {
-            vscode.window.showWarningMessage("请先打开一个力扣题目文件。");
-            this.refresh();
+            this.setPanelMessage("请先打开一个力扣题目文件。");
             return;
         }
         const meta = (0, problemUtils_1.fileMeta)(editor.document.getText(), editor.document.fileName);
         if (!meta || !meta.id) {
-            vscode.window.showWarningMessage("无法在当前文件中找到力扣题号。");
-            this.refresh();
+            this.setPanelMessage("无法在当前文件中找到力扣题号。");
             return;
         }
         try {
+            this.setPanelMessage("正在刷新官方测试用例。", { tone: "tone-running", label: "加载" });
             const descString = await this.baba
                 .getProxy(this.babaStr.ChildCallProxy)
                 .get_instance()
@@ -105,8 +115,7 @@ class LeetCodeWorkbenchProvider {
             const response = JSON.parse(descString);
             const desc = response && response.code === 100 && response.msg ? response.msg.desc : undefined;
             if (!desc) {
-                vscode.window.showWarningMessage("无法从题目描述中刷新官方测试用例。");
-                this.refresh();
+                this.setPanelMessage("无法从题目描述中刷新官方测试用例。");
                 return;
             }
             const seen = new Set();
@@ -123,11 +132,11 @@ class LeetCodeWorkbenchProvider {
             })
                 .map((value, index) => ({ label: `用例 ${index + 1}`, value }));
             if (!officialCases.length) {
-                vscode.window.showWarningMessage("题目描述中没有找到官方测试用例。");
-                this.refresh();
+                this.setPanelMessage("题目描述中没有找到官方测试用例。");
                 return;
             }
             await this.saveCases(officialCases);
+            this.setPanelMessage(`已恢复 ${officialCases.length} 个官方测试用例。`, { tone: "tone-success", label: "完成" });
         }
         catch (error) {
             vscode.window.showErrorMessage(`刷新官方测试用例失败：${(error === null || error === void 0 ? void 0 : error.message) || error}`);
@@ -136,18 +145,21 @@ class LeetCodeWorkbenchProvider {
     }
     formatOfficialCase(testCase) {
         if (Array.isArray(testCase)) {
-            return testCase.map((item) => `${item}\\n`).join("");
+            return testCase.map((item) => this.normalizeCaseText(item)).join("\n");
         }
-        return `${testCase || ""}`;
+        return this.normalizeCaseText(testCase || "");
+    }
+    normalizeCaseText(value) {
+        return String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\\n/g, "\n");
     }
     trimVisibleCase(value) {
-        return String(value || "").trim().replace(/(?:\\n|\r?\n)+$/g, "");
+        return this.normalizeCaseText(value).trim().replace(/\n+$/g, "");
     }
     formatVisibleAllcase(cases) {
         return (cases || [])
             .map((testCase) => this.trimVisibleCase((testCase === null || testCase === void 0 ? void 0 : testCase.value) || ""))
             .filter((value) => value.length > 0)
-            .join("\\n");
+            .join("\n");
     }
     postState() {
         var _a;
@@ -350,18 +362,18 @@ class LeetCodeWorkbenchProvider {
         return new Promise((resolve) => {
             const editor = this.getActiveEditor();
             if (!editor || !this.isLeetCodeDocument(editor.document)) {
-                vscode.window.showWarningMessage("请先打开一个力扣题目文件。");
+                this.setPanelMessage("请先打开一个力扣题目文件。");
                 resolve(undefined);
                 return;
             }
             const document = editor.document;
             const meta = (0, problemUtils_1.fileMeta)(document.getText(), document.fileName);
             if (!meta || !meta.id) {
-                vscode.window.showWarningMessage("无法在当前文件中找到力扣题号。");
+                this.setPanelMessage("无法在当前文件中找到力扣题号。");
                 resolve(undefined);
                 return;
             }
-            storageUtils_1.storageUtils.writeProblemCases(document.fileName, meta.id, cases.map((testCase) => (testCase === null || testCase === void 0 ? void 0 : testCase.value) || ""));
+            storageUtils_1.storageUtils.writeProblemCases(document.fileName, meta.id, cases.map((testCase) => this.normalizeCaseText((testCase === null || testCase === void 0 ? void 0 : testCase.value) || "")));
             this.savingCases = true;
             this.removeCaseBlocks(editor).then(() => {
                 this.savingCases = false;
@@ -379,11 +391,12 @@ class LeetCodeWorkbenchProvider {
         const editor = this.getActiveEditor();
         const actionDocument = await this.resolveActionDocument(editor);
         const uri = (actionDocument === null || actionDocument === void 0 ? void 0 : actionDocument.uri) || this.getRememberedUri();
+        const normalizedTestCase = this.normalizeCaseText(testCase || "");
         const enableAiDebug = Object.prototype.hasOwnProperty.call(options, "enableAiDebug")
             ? !!options.enableAiDebug
             : !!this.aiDebugEnabled;
         if (!uri && ["submit", "test", "retest", "case", "allcase", "runCase", "debug"].indexOf(action) >= 0) {
-            vscode.window.showWarningMessage("请先打开一个力扣题目文件。");
+            this.setPanelMessage("请先打开一个力扣题目文件。");
             return;
         }
         switch (action) {
@@ -400,9 +413,9 @@ class LeetCodeWorkbenchProvider {
                 this.baba.sendNotification(this.babaStr.BABACMD_testCaseDef, { uri, allCase: false });
                 break;
             case "allcase":
-                const visibleAllcase = testCase || this.formatVisibleAllcase((this.currentState && this.currentState.cases) || []);
+                const visibleAllcase = normalizedTestCase || this.formatVisibleAllcase((this.currentState && this.currentState.cases) || []);
                 if (!visibleAllcase) {
-                    vscode.window.showWarningMessage("没有可运行的测试用例。");
+                    this.setPanelMessage("没有可运行的测试用例。");
                     break;
                 }
                 this.baba.sendNotification(this.babaStr.BABACMD_tesCaseArea, { uri, testCase: visibleAllcase, runMode: "allcase" });
@@ -412,19 +425,19 @@ class LeetCodeWorkbenchProvider {
                 break;
             case "debug":
                 if (actionDocument) {
-                    this.setRunningResult("debug", testCase);
+                    this.setRunningResult("debug", normalizedTestCase);
                     await this.baba.sendNotificationAsync(this.babaStr.BABACMD_simpleDebug, {
                         document: actionDocument,
-                        testCase,
+                        testCase: normalizedTestCase,
                         enableAiDebug,
                     });
                 }
                 else {
-                    vscode.window.showWarningMessage("请先打开一个力扣题目文件。");
+                    this.setPanelMessage("请先打开一个力扣题目文件。");
                 }
                 break;
             case "runCase":
-                this.baba.sendNotification(this.babaStr.BABACMD_tesCaseArea, { uri, testCase });
+                this.baba.sendNotification(this.babaStr.BABACMD_tesCaseArea, { uri, testCase: normalizedTestCase });
                 break;
             default:
                 break;
@@ -530,6 +543,7 @@ class LeetCodeWorkbenchProvider {
       --lcpr-workbench-input: var(--vscode-input-background);
       --lcpr-workbench-hover: var(--vscode-toolbar-hoverBackground);
       --lcpr-workbench-case-bg: var(--lcpr-workbench-input);
+      --lcpr-case-idle-strip: color-mix(in srgb, var(--lcpr-workbench-muted) 55%, var(--lcpr-workbench-case-bg) 45%);
       --lcpr-workbench-case-editor-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 88%, var(--lcpr-workbench-fg) 12%);
       --lcpr-workbench-case-editor-border: transparent;
     }
@@ -542,6 +556,7 @@ class LeetCodeWorkbenchProvider {
       --lcpr-workbench-input: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 84%, #ffffff 10%);
       --lcpr-workbench-hover: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 72%, #ffffff 15%);
       --lcpr-workbench-case-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 76%, #ffffff 14%);
+      --lcpr-case-idle-strip: color-mix(in srgb, var(--lcpr-workbench-muted) 72%, var(--lcpr-workbench-case-bg) 28%);
       --lcpr-workbench-case-editor-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 98%, #ffffff 2%);
       --lcpr-workbench-case-editor-border: color-mix(in srgb, var(--lcpr-workbench-fg) 6%, transparent);
     }
@@ -1161,6 +1176,16 @@ class LeetCodeWorkbenchProvider {
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .result-pre.has-diff {
+      color: color-mix(in srgb, var(--vscode-editor-foreground) 86%, var(--vscode-errorForeground, #d1242f) 14%);
+    }
+    .result-diff {
+      color: var(--vscode-errorForeground, var(--vscode-testing-iconFailed, #d1242f));
+      background: color-mix(in srgb, var(--vscode-errorForeground, #d1242f) 13%, transparent);
+      border-radius: 3px;
+      padding: 0 2px;
+      font-weight: 650;
+    }
     .visualize {
       border-top: 1px solid var(--lcpr-workbench-border);
     }
@@ -1430,8 +1455,8 @@ class LeetCodeWorkbenchProvider {
       inset: 0 auto 0 0;
       width: 5px;
       border-radius: 0;
-      background: var(--lcpr-workbench-muted);
-      opacity: .72;
+      background: var(--lcpr-case-idle-strip);
+      opacity: 1;
     }
     .case.case-pass {
       box-shadow: none;
@@ -2061,6 +2086,32 @@ class LeetCodeWorkbenchProvider {
     function isExpectedKey(key) {
       return /^(Expected Answer|Expected Output|Expected)$/i.test(sectionBase(key));
     }
+    function renderLeetCodeDiffValue(value) {
+      const text = String(value === undefined || value === null ? '' : value);
+      const pattern = /__\\s*\`([^]*?)\`\\s*__|__(?!_)([^]*?)(?<!_)__/g;
+      let hasDiff = false;
+      let cursor = 0;
+      let html = '';
+      text.replace(pattern, (match, codeDiff, textDiff, offset) => {
+        const inner = codeDiff || textDiff || '';
+        if (!String(inner).length) return match;
+        hasDiff = true;
+        html += escapeHtml(text.slice(cursor, offset));
+        html += '<span class="result-diff">' + escapeHtml(inner) + '</span>';
+        cursor = offset + match.length;
+        return match;
+      });
+      if (hasDiff) {
+        html += escapeHtml(text.slice(cursor));
+        return { html, hasDiff };
+      }
+      return { html: escapeHtml(text), hasDiff: false };
+    }
+    function renderDiagnosticValue(key, value) {
+      const comparable = isOutputKey(key) || isExpectedKey(key);
+      const rendered = comparable ? renderLeetCodeDiffValue(value) : { html: escapeHtml(value), hasDiff: false };
+      return '<pre class="result-pre' + (rendered.hasDiff ? ' has-diff' : '') + '">' + rendered.html + '</pre>';
+    }
     function diagnostics(payload) {
       const data = getResultData(payload);
       const ignored = new Set(['messages', 'system_message', 'costTime', 'Stdout', 'Std Out', 'stdout', 'msg', 'message', 'error', 'statusCode', 'status_code']);
@@ -2079,7 +2130,7 @@ class LeetCodeWorkbenchProvider {
       return '<div class="result-diagnostics-grid' + equalized + '">' + keys.map((key) => {
         const value = asLines(data[key]).join('\\n');
         const wide = /error|compile|runtime/i.test(key) || (!isOutputKey(key) && !isExpectedKey(key) && outputKey && expectedKey) ? ' result-section-wide' : '';
-        return '<section class="result-section' + wide + '"><h3 class="result-section-title">' + escapeHtml(sectionLabel(key)) + '</h3><pre class="result-pre">' + escapeHtml(value) + '</pre></section>';
+        return '<section class="result-section' + wide + '"><h3 class="result-section-title">' + escapeHtml(sectionLabel(key)) + '</h3>' + renderDiagnosticValue(key, value) + '</section>';
       }).join('') + '</div>';
     }
     function normalizeCaseValue(value) {
@@ -2282,6 +2333,10 @@ class LeetCodeWorkbenchProvider {
       const payload = state.result;
       if (!payload) {
         resultEl.innerHTML = renderActivityStatus('tone-neutral', '空闲', '运行用例、全部用例或提交后，这里会显示最新结果。');
+        return;
+      }
+      if (payload.phase === 'message') {
+        resultEl.innerHTML = renderActivityStatus(payload.tone || 'tone-neutral', payload.label || '提示', payload.message || '');
         return;
       }
       const tone = getTone(payload);

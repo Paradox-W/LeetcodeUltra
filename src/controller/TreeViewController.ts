@@ -273,7 +273,7 @@ class TreeViewController {
                         });
                         if (testString) {
                             tsd.filePath = filePath;
-                            tsd.testString = this.parseTestString(testString);
+                            tsd.testString = this.normalizeTestString(testString);
                             tsd.allCase = false;
                             tsd.type = ConstDefind_1.TestSolutionType.Type_1;
                             this.notifyWorkbenchRunning("test", "test");
@@ -289,7 +289,7 @@ class TreeViewController {
                             const input = (yield fse.readFile(testFile[0].fsPath, "utf-8")).trim();
                             if (input) {
                                 tsd.filePath = filePath;
-                                tsd.testString = this.parseTestString(input.replace(/\r?\n/g, "\\n"));
+                                tsd.testString = this.normalizeTestString(input);
                                 tsd.allCase = false;
                                 this.notifyWorkbenchRunning("test", "test");
                                 result = yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy)
@@ -449,11 +449,12 @@ class TreeViewController {
                 }
                 let tsd = Object.assign({}, ConstDefind_1.defaultTestSolutionData, {});
                 const workbenchRunMode = runMode === "allcase" ? "allcase" : "case";
+                const normalizedTestcase = this.normalizeTestString(testcase);
                 tsd.filePath = filePath;
-                tsd.testString = testcase;
+                tsd.testString = normalizedTestcase;
                 tsd.allCase = workbenchRunMode === "allcase";
                 tsd.type = workbenchRunMode === "allcase" ? ConstDefind_1.TestSolutionType.Type_3 : ConstDefind_1.TestSolutionType.Type_4;
-                this.notifyWorkbenchRunning(workbenchRunMode === "allcase" ? "allcase" : "runCase", workbenchRunMode, testcase);
+                this.notifyWorkbenchRunning(workbenchRunMode === "allcase" ? "allcase" : "runCase", workbenchRunMode, normalizedTestcase);
                 let result = yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy)
                     .get_instance()
                     .testSolution(tsd.filePath, tsd.testString, tsd.allCase);
@@ -498,6 +499,9 @@ class TreeViewController {
             }
             return `'${test.replace(/"/g, '\\"')}'`;
         }
+    }
+    normalizeTestString(test) {
+        return String(test || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\\n/g, "\n");
     }
     /**
      * It switches the endpoint of LeetCode, and then signs out and signs in again

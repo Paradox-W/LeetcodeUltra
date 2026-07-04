@@ -224,7 +224,7 @@ class TreeDataService {
                 const endpoint = choice.value;
                 yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance().switchEndpoint(endpoint);
                 yield leetCodeConfig.update("endpoint", endpoint, true /* UserSetting */);
-                vscode.window.showInformationMessage(`Switched the endpoint to ${endpoint}`);
+                yield (0, OutputUtils_1.ShowMessage)(`Switched the endpoint to ${endpoint}`, ConstDefind_1.OutPutType.info);
             }
             catch (error) {
                 yield (0, OutputUtils_1.ShowMessage)("切换站点出错. 请查看控制台信息~", ConstDefind_1.OutPutType.error);
@@ -368,7 +368,7 @@ class TreeDataService {
                     .trySignIn(loginMethod);
                 if (userName) {
                     BABA_1.BABA.sendNotification(BABA_1.BabaStr.USER_LOGIN_SUC, { userName: userName });
-                    vscode.window.showInformationMessage(`${inMessage} 成功`);
+                    yield (0, OutputUtils_1.ShowMessage)(`${inMessage} 成功`, ConstDefind_1.OutPutType.info);
                 }
             }
             catch (error) {
@@ -384,7 +384,7 @@ class TreeDataService {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance().signOut();
-                vscode.window.showInformationMessage("成功登出");
+                yield (0, OutputUtils_1.ShowMessage)("成功登出", ConstDefind_1.OutPutType.info);
                 BABA_1.BABA.sendNotification(BABA_1.BabaStr.USER_LOGIN_OUT, {});
             }
             catch (error) {

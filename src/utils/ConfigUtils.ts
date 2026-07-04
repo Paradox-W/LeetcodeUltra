@@ -384,7 +384,7 @@ export async function setDefaultLanguage(): Promise<void> {
   }
 
   leetCodeConfig.update("defaultLanguage", selectedItem.label, true /* Global */);
-  window.showInformationMessage(`设置默认语言 ${selectedItem.label} 成功`);
+  await ShowMessage(`设置默认语言 ${selectedItem.label} 成功`, OutPutType.info);
 }
 
 export function isAnswerDiffColor(): boolean {

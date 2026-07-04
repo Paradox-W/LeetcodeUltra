@@ -4,6 +4,7 @@ import * as fse from "fs-extra";
 import * as http from "http";
 import * as https from "https";
 import * as path from "path";
+import * as crypto from "crypto";
 import * as hljs from "highlight.js";
 import * as ConstDefind_1 from "../model/ConstDefind";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
@@ -27,6 +28,7 @@ class LeetCodeCompanionProvider {
             node: undefined,
             solution: undefined,
             hints: undefined,
+            emptyMessage: undefined,
             solutions: {
                 problemInput: "",
                 list: [],
@@ -37,6 +39,11 @@ class LeetCodeCompanionProvider {
                 loading: false,
                 error: "",
                 currentLanguageOnly: false,
+            },
+            solutionFollowing: {
+                authors: this.readSolutionFollowingSync(),
+                filter: "all",
+                notice: undefined,
             },
             submissions: {
                 list: [],
@@ -312,6 +319,7 @@ ${select(" .hljs-strong")} {
         this.state.description = incomingMode === "zh" ? this.state.descriptionZh : this.state.descriptionEn;
         this.state.descriptionStatus = undefined;
         this.state.node = node;
+        this.state.emptyMessage = undefined;
         this.state.activeTab = "description";
         this.revealAndRender(true);
         if ((wantedMode === "zh" && incomingMode !== "zh")
@@ -336,6 +344,7 @@ ${select(" .hljs-strong")} {
             attempt,
             willRetry: true,
         };
+        this.state.emptyMessage = undefined;
         this.state.activeTab = "description";
         this.revealAndRender(true);
     }
@@ -355,6 +364,7 @@ ${select(" .hljs-strong")} {
             attempt,
             willRetry: !!willRetry,
         };
+        this.state.emptyMessage = undefined;
         this.state.activeTab = "description";
         this.revealAndRender(true);
     }
@@ -364,17 +374,21 @@ ${select(" .hljs-strong")} {
         this.state.solutions.detail = solution;
         this.state.solutions.problemInput = problemInput || this.state.solutions.problemInput || "";
         this.state.solutions.error = "";
+        this.state.emptyMessage = undefined;
         this.state.activeTab = "solution";
         this.revealAndRender(true);
     }
     showHints(hints) {
         this.state.hints = Array.isArray(hints) ? hints : [];
+        this.state.emptyMessage = undefined;
         this.state.activeTab = this.state.description ? "description" : "hints";
         this.revealAndRender(true);
     }
     showSubmissions() {
         if (!this.state.node) {
-            vscode.window.showWarningMessage("请先打开一道力扣题目。");
+            this.state.emptyMessage = "请先打开一道力扣题目。";
+            this.state.activeTab = "empty";
+            this.revealAndRender(true);
             return;
         }
         this.state.activeTab = "submissions";
@@ -384,7 +398,9 @@ ${select(" .hljs-strong")} {
     }
     showSolutions() {
         if (!this.state.node) {
-            vscode.window.showWarningMessage("请先打开一道力扣题目。");
+            this.state.emptyMessage = "请先打开一道力扣题目。";
+            this.state.activeTab = "empty";
+            this.revealAndRender(true);
             return;
         }
         const problemInput = this.getProblemInput();
@@ -413,6 +429,159 @@ ${select(" .hljs-strong")} {
             currentLanguageOnly: this.state.solutions && this.state.solutions.currentLanguageOnly === true,
         };
     }
+    ensureSolutionFollowingState() {
+        if (!this.state.solutionFollowing || typeof this.state.solutionFollowing !== "object") {
+            this.state.solutionFollowing = {
+                authors: this.readSolutionFollowingSync(),
+                filter: "all",
+                notice: undefined,
+            };
+        }
+        if (!this.state.solutionFollowing.authors || typeof this.state.solutionFollowing.authors !== "object") {
+            this.state.solutionFollowing.authors = {};
+        }
+        if (!["all", "following"].includes(this.state.solutionFollowing.filter)) {
+            this.state.solutionFollowing.filter = "all";
+        }
+        return this.state.solutionFollowing;
+    }
+    getSolutionFollowingPath() {
+        const workspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+        const globalStoragePath = this.context && this.context.globalStorageUri && this.context.globalStorageUri.fsPath
+            ? this.context.globalStorageUri.fsPath
+            : this.context && this.context.globalStoragePath
+                ? this.context.globalStoragePath
+                : path.join(require("os").homedir(), ".lcpr");
+        const base = workspaceFolder ? path.join(workspaceFolder.uri.fsPath, ".lcpr_data") : path.join(globalStoragePath, "solution-following");
+        return path.join(base, "solution-following.json");
+    }
+    readSolutionFollowingSync() {
+        try {
+            const data = fse.readJsonSync(this.getSolutionFollowingPath());
+            return this.normalizeSolutionFollowingAuthors(data);
+        }
+        catch (_) {
+            return {};
+        }
+    }
+    normalizeSolutionAuthorKey(value) {
+        return String(value || "")
+            .trim()
+            .replace(/^https?:\/\/leetcode\.cn\/u\//i, "")
+            .replace(/^\/?u\//i, "")
+            .replace(/\/+$/g, "")
+            .toLocaleLowerCase();
+    }
+    getSolutionAuthorIdentity(item) {
+        const source = item || {};
+        const userSlug = String(source.authorSlug || source.userSlug || source.slugName || "").trim();
+        const username = String(source.author || source.username || "").trim();
+        const name = String(source.authorName || source.realName || source.name || username || userSlug || "").trim();
+        const key = this.normalizeSolutionAuthorKey(source.authorKey || userSlug || username || name);
+        return {
+            key,
+            userSlug,
+            username,
+            name,
+            label: name || username || userSlug || "",
+        };
+    }
+    normalizeSolutionFollowingAuthors(data) {
+        const rawAuthors = Array.isArray(data)
+            ? data
+            : Array.isArray(data && data.authors)
+                ? data.authors
+                : data && data.authors && typeof data.authors === "object"
+                    ? Object.values(data.authors)
+                    : [];
+        return rawAuthors.reduce((result, raw) => {
+            const entry = typeof raw === "string" ? { userSlug: raw } : (raw || {});
+            const identity = this.getSolutionAuthorIdentity(entry);
+            if (!identity.key) {
+                return result;
+            }
+            result[identity.key] = {
+                key: identity.key,
+                userSlug: identity.userSlug || entry.userSlug || "",
+                username: identity.username || entry.username || "",
+                name: identity.name || entry.name || entry.realName || "",
+                followedAt: entry.followedAt || "",
+            };
+            return result;
+        }, {});
+    }
+    solutionFollowingDocument(authors) {
+        const list = Object.values(authors || {})
+            .filter((item) => item && item.key)
+            .sort((a, b) => String(a.name || a.username || a.userSlug || a.key).localeCompare(String(b.name || b.username || b.userSlug || b.key), "zh-Hans-CN"));
+        return {
+            version: 1,
+            updatedAt: new Date().toISOString(),
+            authors: list,
+        };
+    }
+    async writeSolutionFollowing(authors) {
+        const filePath = this.getSolutionFollowingPath();
+        await fse.ensureDir(path.dirname(filePath));
+        await fse.writeJson(filePath, this.solutionFollowingDocument(authors), { spaces: 2 });
+    }
+    followedSolutionAuthorCount() {
+        return Object.keys(this.ensureSolutionFollowingState().authors || {}).length;
+    }
+    isSolutionAuthorFollowed(item) {
+        const identity = this.getSolutionAuthorIdentity(item);
+        if (!identity.key) {
+            return false;
+        }
+        return !!this.ensureSolutionFollowingState().authors[identity.key];
+    }
+    setSolutionAuthorFilter(value) {
+        const state = this.ensureSolutionFollowingState();
+        state.filter = value === "following" ? "following" : "all";
+        state.notice = undefined;
+        this.state.solutions.detail = undefined;
+        this.state.solution = undefined;
+        this.state.activeTab = "solution";
+        this.revealAndRender(true);
+    }
+    async toggleSolutionAuthorFollow(payload) {
+        const identity = this.getSolutionAuthorIdentity(payload);
+        if (!identity.key) {
+            vscode.window.showErrorMessage("当前题解缺少作者信息，无法关注。");
+            return;
+        }
+        const state = this.ensureSolutionFollowingState();
+        const authors = Object.assign({}, state.authors || {});
+        const wasFollowed = !!authors[identity.key];
+        if (wasFollowed) {
+            delete authors[identity.key];
+        }
+        else {
+            authors[identity.key] = {
+                key: identity.key,
+                userSlug: identity.userSlug,
+                username: identity.username,
+                name: identity.name,
+                followedAt: new Date().toISOString(),
+            };
+        }
+        state.authors = authors;
+        state.notice = {
+            tone: "success",
+            text: wasFollowed ? `已取消关注 ${identity.label}` : `已关注 ${identity.label}`,
+        };
+        try {
+            await this.writeSolutionFollowing(authors);
+        }
+        catch (error) {
+            state.notice = {
+                tone: "error",
+                text: error && error.message ? error.message : "关注列表保存失败",
+            };
+        }
+        this.state.activeTab = "solution";
+        this.revealAndRender(true);
+    }
     problemInputFromNode(node) {
         node = node || {};
         return String(node.qid || node.id || node.fid || "").trim();
@@ -434,9 +603,13 @@ ${select(" .hljs-strong")} {
         }
         return !owner && !!(state.list && state.list.length || state.detail || this.state.solution);
     }
-    toggleSolutionCurrentLanguage() {
+    setSolutionCurrentLanguageOnly(value) {
         const state = this.state.solutions || {};
-        state.currentLanguageOnly = !state.currentLanguageOnly;
+        const nextValue = value === "current";
+        if (state.currentLanguageOnly === nextValue) {
+            return;
+        }
+        state.currentLanguageOnly = nextValue;
         state.detail = undefined;
         state.list = [];
         state.total = 0;
@@ -620,11 +793,15 @@ ${select(" .hljs-strong")} {
     }
     filteredSolutionList() {
         const state = this.state.solutions || {};
-        const list = state.list || [];
-        if (!state.currentLanguageOnly) {
-            return list;
+        let list = state.list || [];
+        const followingState = this.ensureSolutionFollowingState();
+        if (state.currentLanguageOnly) {
+            list = list.filter((item) => this.isCurrentLanguageSolution(item));
         }
-        return list.filter((item) => this.isCurrentLanguageSolution(item));
+        if (followingState.filter === "following") {
+            list = list.filter((item) => this.isSolutionAuthorFollowed(item));
+        }
+        return list;
     }
     collapseOtherLanguageSections(html) {
         const source = String(html || "");
@@ -1228,8 +1405,14 @@ ${select(" .hljs-strong")} {
             case "loadMoreSolutions":
                 this.loadSolutionArticles({ reset: false });
                 break;
-            case "toggleSolutionCurrentLanguage":
-                this.toggleSolutionCurrentLanguage();
+            case "setSolutionLanguageFilter":
+                this.setSolutionCurrentLanguageOnly(message.value);
+                break;
+            case "setSolutionAuthorFilter":
+                this.setSolutionAuthorFilter(message.value);
+                break;
+            case "toggleSolutionAuthorFollow":
+                this.toggleSolutionAuthorFollow(message);
                 break;
             case "selectSolutionArticle":
                 this.loadSolutionArticleDetail(message.slug);
@@ -1267,6 +1450,9 @@ ${select(" .hljs-strong")} {
                 break;
             case "loadProblemImageData":
                 this.loadProblemImageData(message.requestId, message.src);
+                break;
+            case "openProblemImageInEditor":
+                this.openProblemImageInEditor(message.src);
                 break;
             case "saveSubmissionNote":
                 this.saveSubmissionNote(message.id, message.text);
@@ -1336,6 +1522,172 @@ ${select(" .hljs-strong")} {
                     error: error && error.message ? error.message : String(error || "图片读取失败"),
                 });
             }
+        }
+    }
+    getProblemImageStoragePath() {
+        const globalStoragePath = this.context && this.context.globalStorageUri && this.context.globalStorageUri.fsPath
+            ? this.context.globalStorageUri.fsPath
+            : this.context && this.context.globalStoragePath
+                ? this.context.globalStoragePath
+                : path.join(require("os").homedir(), ".lcpr");
+        return path.join(globalStoragePath, "problem-images");
+    }
+    getImageExtension(contentType, source) {
+        const type = String(contentType || "").split(";")[0].trim().toLowerCase();
+        const byType = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/svg+xml": ".svg",
+            "image/avif": ".avif",
+            "image/bmp": ".bmp",
+        };
+        if (byType[type]) {
+            return byType[type];
+        }
+        const allowed = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".bmp"]);
+        try {
+            const url = new URL(String(source || ""), "https://leetcode.cn/");
+            const ext = path.extname(url.pathname).toLowerCase();
+            if (allowed.has(ext)) {
+                return ext === ".jpeg" ? ".jpg" : ext;
+            }
+        }
+        catch (_) {
+            const ext = path.extname(String(source || "").split(/[?#]/)[0]).toLowerCase();
+            if (allowed.has(ext)) {
+                return ext === ".jpeg" ? ".jpg" : ext;
+            }
+        }
+        return ".png";
+    }
+    getProblemImageFileName(source, contentType) {
+        let base = "leetcode-image";
+        try {
+            const url = new URL(String(source || ""), "https://leetcode.cn/");
+            const name = path.basename(url.pathname || "");
+            if (name) {
+                base = name.replace(/\.[a-z0-9]+$/i, "");
+            }
+        }
+        catch (_) {
+            const name = path.basename(String(source || "").split(/[?#]/)[0] || "");
+            if (name) {
+                base = name.replace(/\.[a-z0-9]+$/i, "");
+            }
+        }
+        base = String(base || "leetcode-image").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "leetcode-image";
+        const hash = crypto.createHash("sha1").update(String(source || `${Date.now()}-${Math.random()}`)).digest("hex").slice(0, 12);
+        return `${base}-${hash}${this.getImageExtension(contentType, source)}`;
+    }
+    decodeImageDataUri(src) {
+        const value = String(src || "");
+        if (!/^data:/i.test(value)) {
+            return undefined;
+        }
+        const comma = value.indexOf(",");
+        if (comma < 0) {
+            return undefined;
+        }
+        const header = value.slice(5, comma);
+        const payload = value.slice(comma + 1);
+        const parts = header.split(";").map((part) => part.trim()).filter(Boolean);
+        const mime = parts.find((part) => /^image\//i.test(part)) || "image/png";
+        if (!/^image\//i.test(mime)) {
+            return undefined;
+        }
+        const isBase64 = parts.some((part) => part.toLowerCase() === "base64");
+        let buffer;
+        if (isBase64) {
+            buffer = Buffer.from(payload.replace(/\s/g, ""), "base64");
+        }
+        else {
+            try {
+                buffer = Buffer.from(decodeURIComponent(payload), "utf8");
+            }
+            catch (_) {
+                buffer = Buffer.from(payload, "utf8");
+            }
+        }
+        if (buffer.length > 12 * 1024 * 1024) {
+            throw new Error("图片过大");
+        }
+        return { buffer, contentType: mime };
+    }
+    async writeProblemImageFile(source, buffer, contentType) {
+        const directory = this.getProblemImageStoragePath();
+        await fse.ensureDir(directory);
+        const filePath = path.join(directory, this.getProblemImageFileName(source, contentType));
+        await fse.writeFile(filePath, buffer);
+        return filePath;
+    }
+    normalizeProblemImageSource(src) {
+        const value = String(src || "").trim();
+        if (!value) {
+            return "";
+        }
+        const absolute = this.normalizeRemoteImageUrl(value);
+        if (absolute) {
+            return absolute;
+        }
+        if (value.startsWith("/")) {
+            return this.normalizeRemoteImageUrl(`https://leetcode.cn${value}`);
+        }
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+            try {
+                return this.normalizeRemoteImageUrl(new URL(value, "https://leetcode.cn/").toString());
+            }
+            catch (_) {
+                return "";
+            }
+        }
+        return "";
+    }
+    async openImageUriInEditor(uri) {
+        const options = { preview: true, viewColumn: vscode.ViewColumn.Active };
+        try {
+            await vscode.commands.executeCommand("vscode.openWith", uri, "imagePreview.previewEditor", options);
+        }
+        catch (_) {
+            await vscode.commands.executeCommand("vscode.open", uri, options);
+        }
+    }
+    async openProblemImageInEditor(src) {
+        const raw = String(src || "").trim();
+        if (!raw) {
+            return;
+        }
+        try {
+            let uri;
+            if (/^data:image\//i.test(raw)) {
+                const image = this.decodeImageDataUri(raw);
+                if (!image) {
+                    throw new Error("图片地址不受支持");
+                }
+                uri = vscode.Uri.file(await this.writeProblemImageFile(raw, image.buffer, image.contentType));
+            }
+            else if (/^file:/i.test(raw)) {
+                uri = vscode.Uri.parse(raw);
+            }
+            else if (path.isAbsolute(raw) && await fse.pathExists(raw)) {
+                uri = vscode.Uri.file(raw);
+            }
+            else {
+                const url = this.normalizeProblemImageSource(raw);
+                if (!url) {
+                    throw new Error("图片地址不受支持");
+                }
+                const image = await this.downloadRemoteImage(url);
+                const contentType = image.contentType && /^image\//i.test(image.contentType) ? image.contentType : "";
+                uri = vscode.Uri.file(await this.writeProblemImageFile(url, image.buffer, contentType));
+            }
+            await this.openImageUriInEditor(uri);
+        }
+        catch (error) {
+            const message = error && error.message ? error.message : "图片打开失败";
+            vscode.window.showErrorMessage(`图片打开失败：${message}`);
         }
     }
     downloadRemoteImage(urlString, redirects = 0) {
@@ -1728,20 +2080,34 @@ ${select(" .hljs-strong")} {
     }
     let noteSearchComposing = false;
     applySubmissionNoteSearch();
-    function closeSubmissionFilters(except) {
-      document.querySelectorAll('[data-filter-root].open').forEach((root) => {
-        if (except && root === except) return;
+	    function closeSubmissionFilters(except) {
+	      document.querySelectorAll('[data-filter-root].open').forEach((root) => {
+	        if (except && root === except) return;
         root.classList.remove('open');
         const button = root.querySelector('[data-filter-toggle]');
-        if (button) button.setAttribute('aria-expanded', 'false');
-      });
-    }
-    document.addEventListener('click', (event) => {
-      const clicked = event.target && event.target.closest ? event.target : event.target && event.target.parentElement;
-      if (!clicked || !clicked.closest) return;
-      const fontControl = clicked.closest('[data-font-control]');
-      if (fontControl) {
-        const action = fontControl.getAttribute('data-font-control');
+	        if (button) button.setAttribute('aria-expanded', 'false');
+	      });
+	    }
+	    function openZoomableImage(img) {
+	      if (!img) return;
+	      const src = img.dataset.lcprOriginalSrc || img.currentSrc || img.getAttribute('src') || '';
+	      if (src) {
+	        vscode.postMessage({ command: 'openProblemImageInEditor', src });
+	      }
+	    }
+	    document.addEventListener('click', (event) => {
+	      const clicked = event.target && event.target.closest ? event.target : event.target && event.target.parentElement;
+	      if (!clicked || !clicked.closest) return;
+	      const zoomableImage = clicked.closest('img[data-lcpr-zoomable-image="true"]');
+	      if (zoomableImage) {
+	        event.preventDefault();
+	        event.stopPropagation();
+	        openZoomableImage(zoomableImage);
+	        return;
+	      }
+	      const fontControl = clicked.closest('[data-font-control]');
+	      if (fontControl) {
+	        const action = fontControl.getAttribute('data-font-control');
         state.readerFontLevel = clampFontLevel(state.readerFontLevel) + (action === 'increase' ? 1 : -1);
         applyReadingFontSize();
         return;
@@ -1802,6 +2168,16 @@ ${select(" .hljs-strong")} {
         vscode.postMessage({ command, id: target.getAttribute('data-id') });
       } else if (command === 'selectSolutionArticle') {
         vscode.postMessage({ command, slug: target.getAttribute('data-slug') });
+      } else if (command === 'setSolutionAuthorFilter' || command === 'setSolutionLanguageFilter') {
+        vscode.postMessage({ command, value: target.getAttribute('data-value') });
+      } else if (command === 'toggleSolutionAuthorFollow') {
+        vscode.postMessage({
+          command,
+          authorKey: target.getAttribute('data-author-key'),
+          author: target.getAttribute('data-author'),
+          authorSlug: target.getAttribute('data-author-slug'),
+          authorName: target.getAttribute('data-author-name'),
+        });
       } else if (command === 'switchDescriptionLanguage') {
         vscode.postMessage({ command, mode: target.getAttribute('data-mode') });
       } else if (command === 'saveSubmissionNote') {
@@ -1815,8 +2191,22 @@ ${select(" .hljs-strong")} {
       }
     });
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        closeSubmissionFilters();
+	      if (event.key === 'Escape') {
+	        closeSubmissionFilters();
+	        return;
+	      }
+	      const zoomableImage = event.target && event.target.closest ? event.target.closest('img[data-lcpr-zoomable-image="true"]') : null;
+	      if (zoomableImage && (event.key === 'Enter' || event.key === ' ')) {
+	        event.preventDefault();
+	        openZoomableImage(zoomableImage);
+	        return;
+	      }
+	      const row = event.target && event.target.closest ? event.target.closest('.solution-row[data-command="selectSolutionArticle"]') : null;
+	      if (row && (event.key === 'Enter' || event.key === ' ')) {
+	        const commandTarget = event.target.closest('[data-command]');
+        if (commandTarget && commandTarget !== row) return;
+        event.preventDefault();
+        vscode.postMessage({ command: 'selectSolutionArticle', slug: row.getAttribute('data-slug') });
       }
     });
     function autosizeSubmissionNote(textarea) {
@@ -1901,11 +2291,13 @@ ${select(" .hljs-strong")} {
     <h1>${url ? `<a href="${this.escapeAttr(url)}">${this.escapeHtml(title)}</a>` : this.escapeHtml(title)}</h1>
     ${this.shouldShowCodeNow(activeTab) ? `<button class="lcpr-icon-button" data-command="showProblem" title="开始写代码" aria-label="开始写代码">&lt;/&gt;</button>` : ""}
   </div>
-  ${activeTab === "description" ? this.renderDescriptionToolbar() : ""}
 </header>`;
     }
-    renderDescriptionToolbar() {
-        return `<div class="lcpr-header-tools">${this.renderDescriptionModeControls()}${this.renderFontControls()}</div>`;
+    renderReadingToolbar(label = "阅读字号", leading = "") {
+        return `<div class="lcpr-reading-toolbar${leading ? " has-leading" : ""}">
+  ${leading ? `<div class="lcpr-reading-toolbar-main">${leading}</div>` : ""}
+  <div class="lcpr-reading-toolbar-side">${this.renderFontControls(label)}</div>
+</div>`;
     }
     renderDescriptionModeControls() {
         if (!this.state.node) {
@@ -1924,8 +2316,8 @@ ${select(" .hljs-strong")} {
     shouldShowCodeNow(activeTab) {
         return !!(this.state.node && activeTab !== "submissions" && !ConfigUtils_1.autoCreateFileOnPreview());
     }
-    renderFontControls() {
-        return `<span class="lcpr-font-controls" role="group" aria-label="题面字号">
+    renderFontControls(label = "阅读字号") {
+        return `<span class="lcpr-font-controls" role="group" aria-label="${this.escapeAttr(label)}">
   <button class="lcpr-font-button" type="button" data-font-control="decrease" title="缩小字号" aria-label="缩小字号">A-</button>
   <button class="lcpr-font-button" type="button" data-font-control="increase" title="放大字号" aria-label="放大字号">A+</button>
 </span>`;
@@ -1947,6 +2339,7 @@ ${select(" .hljs-strong")} {
             `<button class="lcpr-secondary-link" data-command="showSubmissions">提交记录</button>`,
         ].join("");
         return `<article class="lcpr-pane lcpr-markdown">
+  ${this.renderReadingToolbar("题面字号", this.renderDescriptionModeControls())}
   <div class="lcpr-body">${this.refineProblemBody(d.body || "")}</div>
   ${this.renderInlineHints()}
   <div class="lcpr-meta-footer">
@@ -1968,6 +2361,7 @@ ${select(" .hljs-strong")} {
         ].join("");
         const rows = this.renderBilingualRows(zh.body || "", en.body || "");
         return `<article class="lcpr-pane lcpr-markdown">
+  ${this.renderReadingToolbar("题面字号", this.renderDescriptionModeControls())}
   <div class="lcpr-bilingual">
     ${rows}
   </div>
@@ -2257,15 +2651,28 @@ ${select(" .hljs-strong")} {
         if (!s) {
             return this.renderSolutionList();
         }
-        const auth = s.is_cn ? `https://leetcode.cn/u/${s.author}/` : `https://leetcode.com/${s.author}/`;
+        const identity = this.getSolutionAuthorIdentity(s);
+        const authorPath = identity.userSlug || identity.username || s.author || "";
+        const auth = s.is_cn ? `https://leetcode.cn/u/${authorPath}/` : `https://leetcode.com/${authorPath}/`;
+        const authorLabel = identity.label || s.authorName || s.author || "-";
+        const authorInitial = Array.from(String(authorLabel || "-").trim())[0] || "-";
+        const authorBody = `<span class="solution-author-avatar">${this.escapeHtml(authorInitial)}</span>
+	          <strong>${this.escapeHtml(authorLabel)}</strong>`;
+        const authorMarkup = authorPath
+            ? `<a class="solution-author-link" href="${this.escapeAttr(auth)}" title="打开作者主页">${authorBody}</a>`
+            : `<span class="solution-author-link static">${authorBody}</span>`;
         const reads = this.formatCompactCount(s.views || s.hitCount);
+        const detailStats = [
+            s.byLeetcode ? `<span class="solution-detail-tag">官方</span>` : "",
+            reads ? `<span class="solution-read-metric">阅读 ${this.escapeHtml(reads)}</span>` : "",
+        ].filter(Boolean).join("");
         const renderedBody = this.prepareProblemImages(MarkdownService_1.markdownService.render(s.body || "", {
             lang: s.lang,
             host: s.is_cn ? "https://leetcode.cn/" : "https://discuss.leetcode.com/",
             articleUrl: s.url,
         }));
         const body = this.collapseOtherLanguageSections(renderedBody);
-        return `<article class="lcpr-pane lcpr-markdown">
+        return `<article class="lcpr-pane lcpr-markdown lcpr-solution-reading">
   <section class="solution-detail-view">
     <div class="solution-detail-nav">
       ${this.state.node ? `<button class="lcpr-plain-button" data-command="backSolutions">返回讨论</button>` : `<span></span>`}
@@ -2274,16 +2681,18 @@ ${select(" .hljs-strong")} {
         ${this.state.node ? `<button class="lcpr-plain-button" data-command="refreshSolutions">刷新</button>` : ""}
       </div>
     </div>
-    <div class="solution-detail-head">
-      <h2>${this.escapeHtml(s.title || "题解讨论")}</h2>
-      <div class="lcpr-section-meta">
-        ${s.lang ? `<span>${this.escapeHtml(s.lang)}</span>` : ""}
-        ${s.byLeetcode ? `<span>官方</span>` : ""}
-        ${s.author ? `<a href="${this.escapeAttr(auth)}">${this.escapeHtml(s.authorName || s.author || "-")}</a>` : ""}
-        ${reads ? `<span>${this.escapeHtml(reads)} 阅读</span>` : ""}
-      </div>
-    </div>
-    <div class="lcpr-body">${body}</div>
+		    <div class="solution-detail-head">
+		      <h2>${this.escapeHtml(s.title || "题解讨论")}</h2>
+		      <div class="solution-detail-meta">
+		        <div class="solution-detail-author-line">
+	          ${authorMarkup}
+	          ${detailStats ? `<div class="solution-detail-stats">${detailStats}</div>` : ""}
+	        </div>
+		        ${this.renderSolutionFollowButton(s, "detail")}
+		      </div>
+		    </div>
+    ${this.renderReadingToolbar("题解字号")}
+	    <div class="lcpr-body">${body}</div>
   </section>
 </article>`;
     }
@@ -2293,34 +2702,87 @@ ${select(" .hljs-strong")} {
         const visibleList = this.filteredSolutionList();
         const loaded = list.length;
         const total = Number(state.total || 0) || loaded;
-        const canLoadMore = !state.loading && total > loaded;
         const langLabel = this.getCurrentSolutionLanguageLabel();
         const currentOnly = state.currentLanguageOnly === true;
-        const languageButtonText = currentOnly ? "查看全部" : `只看 ${langLabel}`;
-        const visibleCount = currentOnly ? visibleList.length : loaded;
+        const followingState = this.ensureSolutionFollowingState();
+        const followingOnly = followingState.filter === "following";
+        const canLoadMore = !followingOnly && !state.loading && total > loaded;
+        const followedCount = this.followedSolutionAuthorCount();
+        const visibleCount = currentOnly || followingOnly ? visibleList.length : loaded;
+        const countText = followingOnly ? `${visibleList.length} / ${loaded}` : `${visibleCount} / ${total}`;
+        const emptyTitle = followingOnly
+            ? followedCount ? "已加载题解里没有关注博主" : "还没有关注博主"
+            : currentOnly ? `暂无 ${this.escapeHtml(langLabel)} 题解讨论` : "暂无题解讨论";
+        const emptyHint = followingOnly
+            ? followedCount ? "可以切回全部，或先在详情页关注更多作者。" : "点击作者旁的关注按钮后，这里会只显示已关注作者。"
+            : currentOnly ? "可以取消语言筛选，或加载更多题解讨论。" : "力扣中文站没有返回本题的题解讨论。";
+        const rowsMarkup = visibleList.length ? `<div class="solution-rows">${visibleList.map((item) => this.renderSolutionRow(item)).join("")}</div>` : "";
+        const loadingMarkup = state.loading ? `<div class="lcpr-loading solution-list-loading">${visibleList.length ? "正在加载更多题解讨论..." : "正在读取题解讨论..."}</div>` : "";
+        const emptyMarkup = !visibleList.length && !state.loading ? `<div class="lcpr-empty compact"><div class="lcpr-empty-title">${emptyTitle}</div><p>${emptyHint}</p></div>` : "";
         return `<article class="lcpr-pane lcpr-solutions">
   ${state.error ? `<div class="lcpr-callout lcpr-error">${this.escapeHtml(state.error)}</div>` : ""}
-  ${state.loading ? `<div class="lcpr-loading">正在读取题解讨论...</div>` : ""}
+  ${followingState.notice && followingState.notice.tone === "error" ? `<div class="lcpr-callout lcpr-error">${this.escapeHtml(followingState.notice.text || "")}</div>` : ""}
   <section class="solution-list-view">
     <div class="submission-titlebar">
       <div>
         <div class="submission-title">题解讨论</div>
-        <div class="submission-count">${this.escapeHtml(String(visibleCount))} / ${this.escapeHtml(String(total))}</div>
+        <div class="submission-count">${this.escapeHtml(countText)}</div>
       </div>
       <div class="submission-title-actions">
         <button class="lcpr-plain-button" data-command="showDescription">返回题目</button>
         <button class="lcpr-plain-button" data-command="refreshSolutions">刷新</button>
       </div>
-    </div>
-    <div class="solution-toolbar">
-      <button class="solution-language-toggle${currentOnly ? " current" : ""}" data-command="toggleSolutionCurrentLanguage" aria-pressed="${currentOnly ? "true" : "false"}">
-        ${this.escapeHtml(languageButtonText)}
-      </button>
-    </div>
-    ${visibleList.length ? `<div class="solution-rows">${visibleList.map((item) => this.renderSolutionRow(item)).join("")}</div>` : (!state.loading ? `<div class="lcpr-empty compact"><div class="lcpr-empty-title">${currentOnly ? `暂无 ${this.escapeHtml(langLabel)} 题解讨论` : "暂无题解讨论"}</div><p>${currentOnly ? "可以取消语言筛选，或加载更多题解讨论。" : "力扣中文站没有返回本题的题解讨论。"}</p></div>` : "")}
-    ${canLoadMore ? `<button class="lcpr-action-button solution-more" data-command="loadMoreSolutions">加载更多</button>` : ""}
-  </section>
+	    </div>
+	    <div class="solution-toolbar">
+	      ${this.renderSolutionAuthorFilterSegments(followingState.filter, followedCount)}
+	      ${this.renderSolutionLanguageFilterSegments(currentOnly, langLabel)}
+	    </div>
+	    ${rowsMarkup}
+	    ${loadingMarkup}
+	    ${emptyMarkup}
+	    ${canLoadMore ? `<button class="lcpr-action-button solution-more" data-command="loadMoreSolutions">加载更多</button>` : ""}
+	  </section>
 </article>`;
+    }
+    renderSolutionAuthorFilterSegments(currentValue, followedCount) {
+        const current = currentValue === "following" ? "following" : "all";
+        const items = [
+            { value: "all", label: "全部" },
+            { value: "following", label: `关注${followedCount ? ` ${followedCount}` : ""}` },
+        ];
+        const buttons = items.map((item) => {
+            const selected = item.value === current;
+            return `<button class="solution-author-segment${selected ? " current" : ""}" type="button" aria-pressed="${selected ? "true" : "false"}" data-command="setSolutionAuthorFilter" data-value="${this.escapeAttr(item.value)}">${this.escapeHtml(item.label)}</button>`;
+        }).join("");
+        return `<div class="solution-author-segments" role="group" aria-label="题解作者筛选">${buttons}</div>`;
+    }
+    renderSolutionLanguageFilterSegments(currentOnly, langLabel) {
+        const current = currentOnly ? "current" : "all";
+        const items = [
+            { value: "all", label: "全部" },
+            { value: "current", label: langLabel || "当前语言" },
+        ];
+        const buttons = items.map((item) => {
+            const selected = item.value === current;
+            return `<button class="solution-language-segment${selected ? " current" : ""}" type="button" aria-pressed="${selected ? "true" : "false"}" data-command="setSolutionLanguageFilter" data-value="${this.escapeAttr(item.value)}">${this.escapeHtml(item.label)}</button>`;
+        }).join("");
+        return `<div class="solution-language-segments" role="group" aria-label="题解语言筛选">${buttons}</div>`;
+    }
+    renderSolutionFollowButton(item, placement = "row") {
+        const identity = this.getSolutionAuthorIdentity(item);
+        if (!identity.key) {
+            return "";
+        }
+        const followed = this.isSolutionAuthorFollowed(item);
+        const label = followed && placement === "detail" ? "取消关注" : followed ? "已关注" : "关注";
+        const title = followed ? `取消关注 ${identity.label}` : `关注 ${identity.label}`;
+        return `<button class="solution-follow-button ${this.escapeAttr(placement)}${followed ? " followed" : ""}" type="button" data-command="toggleSolutionAuthorFollow" data-author-key="${this.escapeAttr(identity.key)}" data-author="${this.escapeAttr(identity.username)}" data-author-slug="${this.escapeAttr(identity.userSlug)}" data-author-name="${this.escapeAttr(identity.name)}" aria-pressed="${followed ? "true" : "false"}" title="${this.escapeAttr(title)}">${this.escapeHtml(label)}</button>`;
+    }
+    renderSolutionFollowTag(item) {
+        if (!this.isSolutionAuthorFollowed(item)) {
+            return "";
+        }
+        return `<span class="solution-follow-tag">已关注</span>`;
     }
     renderSolutionRow(item) {
         const slug = String(item.slug || "");
@@ -2328,13 +2790,15 @@ ${select(" .hljs-strong")} {
         const author = item.authorName || item.author || "匿名";
         const reads = this.formatCompactCount(item.views || item.hitCount);
         const lang = this.getSolutionLanguage(item);
-        return `<button class="solution-row" data-command="selectSolutionArticle" data-slug="${this.escapeAttr(slug)}">
+        return `<div class="solution-row" role="button" tabindex="0" data-command="selectSolutionArticle" data-slug="${this.escapeAttr(slug)}">
   <span class="solution-row-main">
     <span class="solution-row-title">${this.escapeHtml(title)}</span>
-    <span class="solution-row-meta">${item.byLeetcode ? `<span class="solution-badge">官方</span>` : ""}${lang ? `<span class="solution-badge soft">${this.escapeHtml(this.getSolutionLanguageLabel(lang))}</span>` : ""}<span>${this.escapeHtml(author)}</span></span>
+    <span class="solution-row-meta">${item.byLeetcode ? `<span class="solution-badge">官方</span>` : ""}${lang ? `<span class="solution-badge soft">${this.escapeHtml(this.getSolutionLanguageLabel(lang))}</span>` : ""}<span>${this.escapeHtml(author)}</span>${this.renderSolutionFollowTag(item)}</span>
   </span>
-  ${reads ? `<span class="solution-row-votes">${this.escapeHtml(reads)} 阅读</span>` : ""}
-</button>`;
+  <span class="solution-row-side">
+    ${reads ? `<span class="solution-row-votes">${this.escapeHtml(reads)} 阅读</span>` : ""}
+  </span>
+</div>`;
     }
     renderHints() {
         const hints = this.state.hints;
@@ -2536,7 +3000,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   </section>
 </section>`;
     }
-    renderEmpty(message = "打开一道题或获取题解后，这里会显示上下文。") {
+    renderEmpty(message = this.state.emptyMessage || "打开一道题或获取题解后，这里会显示上下文。") {
         return `<div class="lcpr-empty">
   <div class="lcpr-empty-title">暂无内容</div>
   <p>${this.escapeHtml(message)}</p>
@@ -2594,7 +3058,16 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
             }
             const selfClosing = /\/\s*$/.test(String(attrs || ""));
             const cleanAttrs = String(attrs || "").replace(/\/\s*$/, "");
-            const additions = [` data-lcpr-problem-image="true"`];
+            const additions = [` data-lcpr-problem-image="true"`, ` data-lcpr-zoomable-image="true"`];
+            if (!this.extractHtmlAttr(cleanAttrs, "tabindex")) {
+                additions.push(` tabindex="0"`);
+            }
+            if (!this.extractHtmlAttr(cleanAttrs, "role")) {
+                additions.push(` role="button"`);
+            }
+            if (!this.extractHtmlAttr(cleanAttrs, "title")) {
+                additions.push(` title="在编辑器中查看图片"`);
+            }
             if (!this.extractHtmlAttr(cleanAttrs, "decoding")) {
                 additions.push(` decoding="async"`);
             }
@@ -3216,6 +3689,11 @@ body { overflow-x: hidden; }
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--lcpr-border);
   background: var(--lcpr-bg);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .07);
+}
+body.vscode-dark .lcpr-header,
+body.vscode-high-contrast .lcpr-header {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .2);
 }
 .lcpr-title-row {
   display: flex;
@@ -3269,90 +3747,86 @@ h1 a:hover, h1 a:focus, h1 a:active {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
 }
-.lcpr-header-tools {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 7px;
-  min-height: 22px;
-}
 .lcpr-lang-segment {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  min-height: 22px;
+  gap: 14px;
+  min-height: 24px;
 }
 .lcpr-lang-segment button {
   min-width: 0;
-  min-height: 22px;
+  min-height: 24px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--lcpr-muted);
+  color: var(--vscode-textLink-foreground);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
-  line-height: 22px;
+  line-height: 24px;
   cursor: pointer;
 }
 .lcpr-lang-segment button:hover {
-  color: var(--lcpr-fg);
   background: transparent;
+  color: var(--vscode-textLink-activeForeground, var(--vscode-foreground));
 }
 .lcpr-lang-segment button.current {
-  color: var(--lcpr-fg);
   background: transparent;
-  box-shadow: none;
+  color: var(--vscode-foreground);
+  font-weight: 750;
 }
 .lcpr-lang-segment button:focus,
-.lcpr-lang-segment button:focus-visible,
+.lcpr-lang-segment button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
 .lcpr-lang-segment button:active {
-  outline: none;
-  background: transparent;
-  box-shadow: none;
+  transform: translateY(1px);
 }
 .lcpr-font-controls {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  min-height: 22px;
+  gap: 14px;
+  min-height: 24px;
 }
 .lcpr-font-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 22px;
+  min-width: 0;
+  min-height: 24px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--lcpr-muted);
+  color: var(--vscode-textLink-foreground);
   font: inherit;
   font-size: 12px;
-  font-weight: 600;
-  line-height: 22px;
+  font-weight: 650;
+  line-height: 24px;
   letter-spacing: 0;
   cursor: pointer;
 }
 .lcpr-font-button:hover:not(:disabled) {
   background: transparent;
-  color: var(--lcpr-fg);
+  color: var(--vscode-textLink-activeForeground, var(--vscode-foreground));
 }
 .lcpr-font-button:focus,
-.lcpr-font-button:focus-visible,
+.lcpr-font-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
 .lcpr-font-button:active {
-  outline: none;
-  background: transparent;
-  box-shadow: none;
+  transform: translateY(1px);
 }
 .lcpr-font-button:disabled {
   color: var(--lcpr-muted);
   cursor: default;
-  opacity: .48;
+  opacity: .46;
+  transform: none;
 }
 .lcpr-chips, .lcpr-tags, .lcpr-section-meta, .lcpr-secondary-actions {
   display: flex;
@@ -3378,6 +3852,32 @@ h1 a:hover, h1 a:focus, h1 a:active {
 .lcpr-hard { color: var(--vscode-testing-iconFailed, #f85149); }
 .lcpr-content { padding: 14px 16px 24px; }
 .lcpr-pane { display: flex; flex-direction: column; gap: 14px; }
+.lcpr-reading-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 22px;
+  margin: -4px 0 -2px;
+}
+.lcpr-reading-toolbar.has-leading {
+  justify-content: space-between;
+}
+.lcpr-reading-toolbar-main,
+.lcpr-reading-toolbar-side {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.lcpr-reading-toolbar-main {
+  flex: 1 1 auto;
+}
+.lcpr-reading-toolbar-side {
+  flex: 0 0 auto;
+}
+.lcpr-reading-toolbar .lcpr-font-controls {
+  gap: 6px;
+}
 .lcpr-tags a { background: transparent; }
 .lcpr-markdown {
   font-size: var(--lcpr-reading-font-size);
@@ -3399,6 +3899,36 @@ h1 a:hover, h1 a:focus, h1 a:active {
 }
 .lcpr-markdown p, .lcpr-markdown ul, .lcpr-markdown ol, .lcpr-markdown blockquote, .lcpr-markdown table {
   margin: 10px 0;
+}
+.lcpr-solution-reading {
+  line-height: 1.72;
+}
+.lcpr-solution-reading .lcpr-body {
+  padding-top: 4px;
+}
+.lcpr-solution-reading h1,
+.lcpr-solution-reading h2,
+.lcpr-solution-reading h3,
+.lcpr-solution-reading h4 {
+  margin: 24px 0 12px;
+  line-height: 1.36;
+}
+.lcpr-solution-reading p,
+.lcpr-solution-reading blockquote,
+.lcpr-solution-reading table {
+  margin: 16px 0;
+}
+.lcpr-solution-reading ul,
+.lcpr-solution-reading ol {
+  margin: 14px 0 18px;
+  padding-left: 1.8em;
+}
+.lcpr-solution-reading li {
+  margin: 7px 0;
+  padding-left: 2px;
+}
+.lcpr-solution-reading pre {
+  margin: 16px 0;
 }
 .lcpr-markdown a { color: var(--vscode-textLink-foreground); }
 .lcpr-markdown .katex {
@@ -3506,6 +4036,14 @@ h1 a:hover, h1 a:focus, h1 a:active {
   height: auto !important;
   object-fit: contain;
   margin: 8px auto;
+}
+.lcpr-markdown img[data-lcpr-zoomable-image="true"] {
+  cursor: zoom-in;
+}
+.lcpr-markdown img[data-lcpr-zoomable-image="true"]:focus-visible {
+  outline: 1px solid var(--lcpr-border);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 body.vscode-dark .lcpr-markdown img,
 body.vscode-high-contrast .lcpr-markdown img {
@@ -3786,6 +4324,15 @@ body.vscode-high-contrast .lcpr-markdown img {
   color: var(--lcpr-muted);
   font-size: 12px;
 }
+.solution-list-loading {
+  padding: 3px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lcpr-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
 .lcpr-error {
   border-color: var(--vscode-inputValidation-errorBorder, var(--lcpr-border));
   color: var(--vscode-errorForeground, var(--lcpr-fg));
@@ -3834,7 +4381,7 @@ body.vscode-high-contrast .lcpr-markdown img {
   width: 100%;
   min-width: 0;
   padding: 10px 11px 10px 13px;
-  border: 1px solid var(--vscode-input-border, var(--lcpr-border));
+  border: 1px solid var(--lcpr-border);
   border-radius: 4px;
   background: var(--lcpr-input);
   color: var(--lcpr-fg);
@@ -3842,7 +4389,7 @@ body.vscode-high-contrast .lcpr-markdown img {
   text-align: left;
   cursor: pointer;
   overflow: hidden;
-  transition: background-color .12s ease, border-color .12s ease;
+  transition: background-color .12s ease;
 }
 .solution-row::before {
   content: "";
@@ -3852,7 +4399,7 @@ body.vscode-high-contrast .lcpr-markdown img {
   background: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 64%, transparent);
 }
 .solution-row:hover {
-  border-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 48%, var(--lcpr-border));
+  border-color: var(--lcpr-border);
   background: var(--lcpr-hover);
 }
 .solution-row-main {
@@ -3894,6 +4441,16 @@ body.vscode-high-contrast .lcpr-markdown img {
   box-shadow: inset 0 0 0 1px var(--lcpr-border);
   color: var(--lcpr-muted);
 }
+.solution-follow-tag {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--vscode-charts-green, #2ea043) 12%, var(--lcpr-bg));
+  color: color-mix(in srgb, var(--vscode-charts-green, #2ea043) 72%, var(--lcpr-fg));
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
 .solution-row-votes {
   padding-top: 1px;
   color: var(--lcpr-muted);
@@ -3901,36 +4458,113 @@ body.vscode-high-contrast .lcpr-markdown img {
   font-weight: 650;
   white-space: nowrap;
 }
+.solution-row-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: max-content;
+}
+.solution-follow-button {
+  flex: 0 0 auto;
+  min-width: 64px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--vscode-button-background);
+  border-radius: 4px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 26px;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.solution-follow-button:hover {
+  border-color: var(--vscode-button-hoverBackground);
+  background: var(--vscode-button-hoverBackground);
+  color: var(--vscode-button-foreground);
+}
+.solution-follow-button.followed {
+  min-width: 78px;
+  color: var(--vscode-button-secondaryForeground, var(--lcpr-fg));
+  border-color: var(--vscode-button-secondaryBackground, var(--lcpr-border));
+  background: var(--vscode-button-secondaryBackground, var(--lcpr-input));
+}
+.solution-follow-button.followed:hover {
+  border-color: var(--lcpr-border);
+  background: var(--lcpr-hover);
+  color: var(--lcpr-fg);
+}
+.solution-follow-button.detail {
+  height: 32px;
+  min-width: 74px;
+  padding: 0 14px;
+  font-size: 13px;
+  line-height: 30px;
+}
+.solution-follow-button.detail.followed {
+  min-width: 88px;
+}
 .solution-more {
   margin-top: 2px;
 }
 .solution-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
-.solution-language-toggle {
-  min-width: 0;
+.solution-author-segments,
+.solution-language-segments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 132px;
   height: 28px;
-  padding: 0 9px;
+  padding: 2px;
   border: 1px solid var(--lcpr-border);
   border-radius: 4px;
   background: var(--lcpr-input);
+}
+.solution-author-segments {
+  flex: 1 1 136px;
+  max-width: 190px;
+}
+.solution-language-segments {
+  flex: 0 1 132px;
+  min-width: 118px;
+  max-width: 160px;
+}
+.solution-author-segment,
+.solution-language-segment {
+  min-width: 0;
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
   color: var(--lcpr-muted);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
-  line-height: 26px;
+  line-height: 22px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
-.solution-language-toggle:hover {
+.solution-author-segment:hover,
+.solution-language-segment:hover {
   color: var(--lcpr-fg);
   background: var(--lcpr-hover);
 }
-.solution-language-toggle.current {
-  color: var(--vscode-button-foreground);
-  border-color: var(--vscode-button-background);
-  background: var(--vscode-button-background);
+.solution-author-segment.current,
+.solution-language-segment.current {
+  color: var(--lcpr-fg);
+  background: var(--vscode-button-secondaryBackground, var(--lcpr-bg));
+  box-shadow: inset 0 0 0 1px var(--lcpr-border);
 }
 .solution-language-tabs {
   margin: 12px 0;
@@ -4037,12 +4671,112 @@ body.vscode-high-contrast .lcpr-markdown img {
   margin-top: 0;
 }
 .solution-detail-head h2 {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--lcpr-fg);
   font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
+  line-height: 1.22;
+}
+.solution-detail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 13px;
+  min-width: 0;
+}
+.solution-detail-author-line {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.solution-author-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  color: var(--lcpr-fg);
+  text-decoration: none;
+}
+.solution-author-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 14%, var(--lcpr-input));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 28%, transparent);
+  color: var(--vscode-textLink-foreground);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+.solution-author-link strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--vscode-textLink-foreground);
+  font-size: 14px;
+  font-weight: 750;
   line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.solution-author-link:hover strong {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.solution-author-link:hover .solution-author-avatar {
+  background: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 22%, var(--lcpr-input));
+}
+.solution-author-link:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.solution-meta-kicker {
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.solution-detail-stats {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+.solution-read-metric {
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.solution-detail-tag {
+  flex: 0 0 auto;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground, var(--lcpr-bg));
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
 }
 .solution-list-view, .solution-detail-view, .submission-list-view, .submission-detail-view {
   display: flex;
@@ -4148,6 +4882,12 @@ body.vscode-high-contrast .lcpr-markdown img {
 .submission-status-segment:focus-visible,
 .submission-filter-option:focus,
 .submission-filter-option:focus-visible,
+.solution-author-segment:focus,
+.solution-author-segment:focus-visible,
+.solution-language-segment:focus,
+.solution-language-segment:focus-visible,
+.solution-follow-button:focus,
+.solution-follow-button:focus-visible,
 .solution-row:focus,
 .solution-row:focus-visible,
 .submission-row:focus,

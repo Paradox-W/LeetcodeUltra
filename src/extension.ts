@@ -120,7 +120,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
         const next = !current;
         await config.update("autoCreateFileOnPreview", next, ConfigurationTarget.Global);
         companionService.revealAndRender(true);
-        window.showInformationMessage(next ? "已开启自动创建文件。" : "已关闭自动创建文件。");
+        await ShowMessage(next ? "已开启自动创建文件。" : "已关闭自动创建文件。", OutPutType.info);
       }),
       commands.registerCommand("lcpr.showProblem", (node: TreeNodeModel) => {
         BABA.sendNotification(BabaStr.BABACMD_showProblem, node);

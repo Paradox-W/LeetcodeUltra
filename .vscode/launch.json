@@ -10,7 +10,11 @@
             "runtimeExecutable": "${execPath}",
             "args": [
                 "--extensionDevelopmentPath=${workspaceRoot}",
-                "--no-warnings"
+                "--user-data-dir=${workspaceRoot}/.vscode-test/user-data",
+                "--extensions-dir=${workspaceRoot}/.vscode-test/extensions",
+                "--disable-workspace-trust",
+                "--no-warnings",
+                "/Users/paradox/Documents/Leetcode/Leetcode.code-workspace"
             ],
             "autoAttachChildProcesses": true,
             // "stopOnEntry": false,

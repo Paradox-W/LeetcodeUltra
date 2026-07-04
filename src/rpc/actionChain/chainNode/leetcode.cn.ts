@@ -304,6 +304,14 @@ class LeetCodeCn extends ChainNodeBase {
   getHintsOnline = (problem, cb) => {
     getSolutionHints(problem.slug, cb);
   };
+
+  getSolutionArticles = (problem, options, cb) => {
+    getSolutionArticles(problem.slug, options || {}, cb);
+  };
+
+  getSolutionArticle = (problem, slug, cb) => {
+    getSolutionBySlugData(problem.slug, slug, "", cb);
+  };
 }
 
 function getSolutionHints(question_slug: string, cb) {
@@ -333,10 +341,17 @@ function getSolutionHints(question_slug: string, cb) {
 }
 
 function getSolutionBySlug(question_slug: string, articles_slug: string, lang: string) {
+  getSolutionBySlugData(question_slug, articles_slug, lang, function (e, solution_result) {
+    if (e) return reply.info(JSON.stringify({ code: -1, error: e.msg || e }));
+    if (!solution_result) return reply.info(JSON.stringify({ code: 100 }));
+    reply.info(JSON.stringify({ code: 100, solution: solution_result }));
+  });
+}
+
+function getSolutionBySlugData(question_slug: string, articles_slug: string, lang: string, cb) {
   // 没有选择的题解标识
   if (articles_slug == "") {
-    reply.info(JSON.stringify({ code: 100 }));
-    return;
+    return cb(null, undefined);
   }
 
   const opts = makeOpts(configUtils.sys.urls.graphql);
@@ -365,6 +380,8 @@ function getSolutionBySlug(question_slug: string, articles_slug: string, lang: s
       "    title",
       "    slug",
       "    identifier",
+      "    hitCount",
+      "    reactionType",
       "author {",
       "      username",
       "      profile {",
@@ -379,15 +396,18 @@ function getSolutionBySlug(question_slug: string, articles_slug: string, lang: s
     ].join("\n"),
   };
 
-  request.post(opts, function (_, __, body) {
+  request.post(opts, function (e, resp, body) {
+    e = checkError(e, resp, 200);
+    if (e) return cb(e);
+    if (body && body.errors && body.errors.length) return cb(body.errors[0].message || "题解读取失败");
     // let bbb = body;
     // console.log(bbb);
-    let solution = body.data.solutionArticle;
-    if (!solution) return reply.info(JSON.stringify({ code: -1, error: "本题没有题解" }));
+    let solution = body?.data?.solutionArticle;
+    if (!solution) return cb("本题没有题解");
 
     let link = URL_DISCUSS.replace("$slug", question_slug).replace("$articles_slug", articles_slug);
     // let content = solution.content.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
-    let content = solution.content.replace(/\\n/g, "\n");
+    let content = String(solution.content || "").replace(/\\n/g, "\n");
 
     // content = content.replace(/\$\\textit/g, "$");
     // content = content.replace(/\$\\texttt/g, "$");
@@ -401,11 +421,17 @@ function getSolutionBySlug(question_slug: string, articles_slug: string, lang: s
     solution_result.title = solution.title;
     solution_result.url = link;
     solution_result.lang = lang;
-    solution_result.author = solution.author.username;
-    solution_result.votes = solution.voteCount;
+    solution_result.author = solution.author?.username || "";
+    solution_result.authorName = solution.author?.profile?.realName || solution.author?.username || "";
+    solution_result.views = solution.hitCount || "";
+    solution_result.reactionType = solution.reactionType || "";
     solution_result.body = content;
     solution_result.is_cn = true;
-    reply.info(JSON.stringify({ code: 100, solution: solution_result }));
+    solution_result.byLeetcode = !!solution.byLeetcode;
+    solution_result.slug = solution.slug || articles_slug;
+    solution_result.uuid = solution.uuid || "";
+    solution_result.identifier = solution.identifier || "";
+    cb(null, solution_result);
   });
 }
 
@@ -462,6 +488,86 @@ function getSolutionArticlesSlugList(question_slug: string, lang: string, cb) {
     } else {
       cb(e, temp_result);
     }
+  });
+}
+
+function getSolutionArticles(question_slug: string, options: any, cb) {
+  const opts = makeOpts(configUtils.sys.urls.graphql);
+  opts.headers.Origin = configUtils.sys.urls.base;
+  let URL_DISCUSS = "https://leetcode.cn/problems/$slug/solution";
+  opts.headers.Referer = URL_DISCUSS.replace("$slug", question_slug);
+
+  const first = Math.max(1, Math.min(Number(options.first || 20) || 20, 50));
+  const skip = Math.max(0, Number(options.skip || 0) || 0);
+  const orderBy = String(options.orderBy || "DEFAULT").trim() || "DEFAULT";
+  const lang = String(options.lang || "").trim();
+
+  opts.json = true;
+  opts.body = {
+    operationName: "questionSolutionArticles",
+    variables: Object.assign({ questionSlug: question_slug, first, skip, orderBy }, lang ? { tagSlugs: [lang] } : {}),
+    query: [
+      "query questionSolutionArticles($questionSlug: String!, $skip: Int, $first: Int, $orderBy: SolutionArticleOrderBy, $userInput: String, $tagSlugs: [String!]) {",
+      "questionSolutionArticles(questionSlug: $questionSlug, skip: $skip, first: $first, orderBy: $orderBy, userInput: $userInput, tagSlugs: $tagSlugs) {",
+      "        totalNum",
+      "        edges {",
+      "          node {",
+      "            ...solutionArticle",
+      "            __typename",
+      "          }",
+      "      __typename",
+      "    }",
+      "    __typename",
+      "  }",
+      "}",
+      "fragment solutionArticle on SolutionArticleNode {",
+      "      uuid",
+      "      slug",
+      "      title",
+      "      identifier",
+      "      hitCount",
+      "      reactionType",
+      "      author {",
+      "       username",
+      "       profile {",
+      "         realName",
+      "       }",
+      "      }",
+      "  byLeetcode",
+      "  __typename",
+      "}",
+    ].join("\n"),
+  };
+
+  request.post(opts, function (e, resp, body) {
+    e = checkError(e, resp, 200);
+    if (e) return cb(e);
+    if (body && body.errors && body.errors.length) return cb(body.errors[0].message || "题解列表读取失败");
+    const data = body?.data?.questionSolutionArticles || {};
+    const articles = (data.edges || [])
+      .map((edge) => edge?.node)
+      .filter((node) => node && node.slug)
+      .map((node, index) => ({
+        index: skip + index + 1,
+        uuid: node.uuid || "",
+        slug: node.slug || "",
+        identifier: node.identifier || "",
+        title: node.title || "",
+        lang,
+        author: node.author?.username || "",
+        authorName: node.author?.profile?.realName || node.author?.username || "",
+        views: node.hitCount || "",
+        reactionType: node.reactionType || "",
+        byLeetcode: !!node.byLeetcode,
+        is_cn: true,
+        url: `https://leetcode.cn/problems/${question_slug}/solution/${node.slug || ""}/`,
+      }));
+    cb(null, {
+      articles,
+      total: Number(data.totalNum || articles.length) || articles.length,
+      skip,
+      first,
+    });
   });
 }
 

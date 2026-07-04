@@ -308,7 +308,6 @@ class TreeDataService {
                 if (Date.now() - startedAt + intervalMs > timeoutMs) {
                     break;
                 }
-                companionService.showDescriptionError(node, lastError, attempt, true);
                 yield new Promise((resolve) => setTimeout(resolve, intervalMs));
                 if (seq !== this.previewLoadSeq) {
                     return;

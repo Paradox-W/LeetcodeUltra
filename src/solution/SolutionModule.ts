@@ -114,6 +114,7 @@ class SolutionService extends BaseWebviewService_1.BaseWebViewService {
         const body = MarkdownService_1.markdownService.render(this.solution.body, {
             lang: this.solution.lang,
             host: "https://discuss.leetcode.com/",
+            articleUrl: this.solution.url,
         });
         // "<link rel=\"stylesheet\" type=\"text/css\" href=\"vscode-resource:/home/cc/.vscode-server/bin/30d9c6cd9483b2cc586687151bcbcd635f373630/extensions/markdown-language-features/media/markdown.css\">\n<link rel=\"stylesheet\" type=\"text/css\" href=\"vscode-resource:/home/cc/.vscode-server/bin/30d9c6cd9483b2cc586687151bcbcd635f373630/extensions/markdown-language-features/media/highlight.css\">\n<style>\nbody {\n    font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;\n    font-size: 14px;\n    line-height: 1.6;\n}\n</style>"
         // <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; script-src vscode-resource:; style-src vscode-resource:;"/>

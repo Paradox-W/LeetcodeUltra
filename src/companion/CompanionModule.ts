@@ -27,6 +27,17 @@ class LeetCodeCompanionProvider {
             node: undefined,
             solution: undefined,
             hints: undefined,
+            solutions: {
+                problemInput: "",
+                list: [],
+                detail: undefined,
+                total: 0,
+                skip: 0,
+                first: 20,
+                loading: false,
+                error: "",
+                currentLanguageOnly: false,
+            },
             submissions: {
                 list: [],
                 detail: undefined,
@@ -170,92 +181,109 @@ class LeetCodeCompanionProvider {
         }
         return "";
     }
-    buildSubmissionCodeHighlightStyle() {
+    buildCompanionCodeHighlightStyle() {
         const tokens = this.getEditorThemeTokens();
         const foreground = tokens.colors["editor.foreground"] || tokens.colors.foreground || "var(--vscode-editor-foreground, var(--lcpr-fg))";
+        const background = tokens.colors["editor.background"] || tokens.colors.background || "var(--vscode-editor-background, transparent)";
         const resolve = (scopes, fallback) => this.findTokenForeground(tokens.tokenColors, scopes) || fallback || foreground;
         const colors = {
-            keyword: resolve(["keyword", "storage", "storage.type"], "#cf222e"),
+            keyword: resolve(["keyword.control", "keyword", "storage", "storage.type"], "#cf222e"),
             functionName: resolve(["entity.name.function", "support.function"], "#8250df"),
-            type: resolve(["support.type", "storage.type", "entity.name.type", "entity.name.class"], "#0550ae"),
+            type: resolve(["entity.name.type.class.cpp", "entity.name.type.class", "support.class.cpp", "support.type", "storage.type", "entity.name.type", "entity.name.class"], "#0550ae"),
             string: resolve(["string"], "#0a3069"),
             number: resolve(["constant.numeric", "constant"], "#0550ae"),
             comment: resolve(["comment", "punctuation.definition.comment"], "#6e7781"),
-            variable: resolve(["variable", "entity.name", "meta.definition.variable"], "#953800"),
+            variable: resolve(["variable.parameter.cpp", "variable", "entity.name", "meta.definition.variable"], "#953800"),
             meta: resolve(["meta.preprocessor", "keyword.control.directive", "meta"], "#0550ae"),
             property: resolve(["meta.property-name", "support.variable", "support"], "#0550ae"),
             literal: resolve(["constant.language", "constant"], "#0550ae"),
         };
+        const codeSelectors = [
+            "body .submission-code code.hljs",
+            "body .solution-detail-view .lcpr-body pre code",
+            "body .solution-language-section pre code",
+            "body .lcpr-markdown .solution-detail-view pre code",
+        ].join(",\n");
+        const preSelectors = [
+            "body .submission-code",
+            "body .solution-detail-view .lcpr-body pre",
+            "body .solution-language-section pre",
+            "body .lcpr-markdown .solution-detail-view pre",
+        ].join(",\n");
+        const select = (suffix = "") => codeSelectors.split(",\n").map((selector) => `${selector}${suffix}`).join(",\n");
         return `
-/* lcpr-submission-highlight-v2: theme-derived, isolated from VSCode markdown highlight.css */
-body .submission-code code.hljs,
-body .submission-code code.hljs * {
+/* lcpr-companion-highlight-v4: theme-derived, isolated from VSCode markdown highlight.css */
+${preSelectors} {
+  background: ${background} !important;
+}
+${select()},
+${select(" *")} {
   background: transparent !important;
   font-style: normal !important;
 }
-body .submission-code code.hljs {
+${select()} {
   color: ${foreground} !important;
 }
-body .submission-code code.hljs .hljs-keyword,
-body .submission-code code.hljs .hljs-selector-tag,
-body .submission-code code.hljs .hljs-doctag {
+${select(" .hljs-keyword")},
+${select(" .hljs-selector-tag")},
+${select(" .hljs-doctag")} {
   color: ${colors.keyword} !important;
 }
-body .submission-code code.hljs .hljs-title {
+${select(" .hljs-title")} {
   color: ${colors.functionName} !important;
 }
-body .submission-code code.hljs .hljs-class,
-body .submission-code code.hljs .hljs-type,
-body .submission-code code.hljs .hljs-class .hljs-title {
+${select(" .hljs-class")},
+${select(" .hljs-type")},
+${select(" .hljs-class .hljs-title")} {
   color: ${colors.type} !important;
 }
-body .submission-code code.hljs .hljs-function,
-body .submission-code code.hljs .hljs-params {
+${select(" .hljs-function")},
+${select(" .hljs-params")} {
   color: ${foreground} !important;
 }
-body .submission-code code.hljs .hljs-function .hljs-title {
+${select(" .hljs-function .hljs-title")} {
   color: ${colors.functionName} !important;
 }
-body .submission-code code.hljs .hljs-built_in,
-body .submission-code code.hljs .hljs-builtin-name {
+${select(" .hljs-built_in")},
+${select(" .hljs-builtin-name")} {
   color: ${colors.property} !important;
 }
-body .submission-code code.hljs .hljs-string,
-body .submission-code code.hljs .hljs-regexp,
-body .submission-code code.hljs .hljs-symbol,
-body .submission-code code.hljs .hljs-bullet,
-body .submission-code code.hljs .hljs-addition {
+${select(" .hljs-string")},
+${select(" .hljs-regexp")},
+${select(" .hljs-symbol")},
+${select(" .hljs-bullet")},
+${select(" .hljs-addition")} {
   color: ${colors.string} !important;
 }
-body .submission-code code.hljs .hljs-number {
+${select(" .hljs-number")} {
   color: ${colors.number} !important;
 }
-body .submission-code code.hljs .hljs-comment,
-body .submission-code code.hljs .hljs-quote {
+${select(" .hljs-comment")},
+${select(" .hljs-quote")} {
   color: ${colors.comment} !important;
 }
-body .submission-code code.hljs .hljs-variable,
-body .submission-code code.hljs .hljs-template-variable,
-body .submission-code code.hljs .hljs-name {
+${select(" .hljs-variable")},
+${select(" .hljs-template-variable")},
+${select(" .hljs-name")} {
   color: ${colors.variable} !important;
 }
-body .submission-code code.hljs .hljs-meta,
-body .submission-code code.hljs .hljs-meta-keyword,
-body .submission-code code.hljs .hljs-tag {
+${select(" .hljs-meta")},
+${select(" .hljs-meta-keyword")},
+${select(" .hljs-tag")} {
   color: ${colors.meta} !important;
 }
-body .submission-code code.hljs .hljs-attr,
-body .submission-code code.hljs .hljs-attribute,
-body .submission-code code.hljs .hljs-link {
+${select(" .hljs-attr")},
+${select(" .hljs-attribute")},
+${select(" .hljs-link")} {
   color: ${colors.property} !important;
 }
-body .submission-code code.hljs .hljs-literal {
+${select(" .hljs-literal")} {
   color: ${colors.literal} !important;
 }
-body .submission-code code.hljs .hljs-deletion {
+${select(" .hljs-deletion")} {
   color: var(--vscode-errorForeground, #cf222e) !important;
 }
-body .submission-code code.hljs .hljs-strong {
+${select(" .hljs-strong")} {
   font-weight: 700 !important;
 }`;
     }
@@ -272,6 +300,12 @@ body .submission-code code.hljs .hljs-strong {
     showDescription(description, node) {
         const incomingMode = ConfigUtils_1.isUseEndpointTranslation() ? "zh" : "en";
         const wantedMode = this.normalizeDescriptionMode(this.state.descriptionMode || incomingMode);
+        const previousInput = this.getProblemInput();
+        const nextInput = this.problemInputFromNode(node);
+        if ((previousInput && nextInput && previousInput !== nextInput)
+            || (nextInput && this.getSolutionProblemInput() && this.getSolutionProblemInput() !== nextInput)) {
+            this.resetSolutions(nextInput);
+        }
         this.state.descriptionMode = wantedMode;
         this.state.descriptionZh = incomingMode === "zh" ? description : undefined;
         this.state.descriptionEn = incomingMode === "en" ? description : undefined;
@@ -325,7 +359,11 @@ body .submission-code code.hljs .hljs-strong {
         this.revealAndRender(true);
     }
     showSolution(solution) {
+        const problemInput = this.getProblemInput();
         this.state.solution = solution;
+        this.state.solutions.detail = solution;
+        this.state.solutions.problemInput = problemInput || this.state.solutions.problemInput || "";
+        this.state.solutions.error = "";
         this.state.activeTab = "solution";
         this.revealAndRender(true);
     }
@@ -344,9 +382,426 @@ body .submission-code code.hljs .hljs-strong {
         this.revealAndRender(true);
         this.loadSubmissions();
     }
-    getProblemInput() {
-        const node = this.state.node || {};
+    showSolutions() {
+        if (!this.state.node) {
+            vscode.window.showWarningMessage("请先打开一道力扣题目。");
+            return;
+        }
+        const problemInput = this.getProblemInput();
+        if (this.isSolutionsStale(problemInput)) {
+            this.resetSolutions(problemInput);
+        }
+        this.state.activeTab = "solution";
+        this.state.solutions.detail = undefined;
+        this.state.solution = undefined;
+        this.revealAndRender(true);
+        if (!this.state.solutions.list.length) {
+            this.loadSolutionArticles({ reset: true });
+        }
+    }
+    resetSolutions(problemInput = this.getProblemInput()) {
+        this.state.solution = undefined;
+        this.state.solutions = {
+            problemInput: String(problemInput || ""),
+            list: [],
+            detail: undefined,
+            total: 0,
+            skip: 0,
+            first: 20,
+            loading: false,
+            error: "",
+            currentLanguageOnly: this.state.solutions && this.state.solutions.currentLanguageOnly === true,
+        };
+    }
+    problemInputFromNode(node) {
+        node = node || {};
         return String(node.qid || node.id || node.fid || "").trim();
+    }
+    getProblemInput() {
+        return this.problemInputFromNode(this.state.node);
+    }
+    getSolutionProblemInput() {
+        return String((this.state.solutions && this.state.solutions.problemInput) || "").trim();
+    }
+    isSolutionsStale(problemInput = this.getProblemInput()) {
+        const owner = this.getSolutionProblemInput();
+        const state = this.state.solutions || {};
+        if (!problemInput) {
+            return false;
+        }
+        if (owner && owner !== problemInput) {
+            return true;
+        }
+        return !owner && !!(state.list && state.list.length || state.detail || this.state.solution);
+    }
+    toggleSolutionCurrentLanguage() {
+        const state = this.state.solutions || {};
+        state.currentLanguageOnly = !state.currentLanguageOnly;
+        state.detail = undefined;
+        state.list = [];
+        state.total = 0;
+        state.skip = 0;
+        this.state.solution = undefined;
+        this.state.activeTab = "solution";
+        this.revealAndRender(true);
+        this.loadSolutionArticles({ reset: true });
+    }
+    getCurrentSolutionLanguage() {
+        const editor = vscode.window.activeTextEditor;
+        const problemInput = this.getProblemInput();
+        if (editor && editor.document) {
+            const text = editor.document.getText();
+            const match = text.match(/@lc\s+app=([^\s]+)\s+id=([\s\S]*?)\s+lang=([^\s]+)/);
+            if (match) {
+                const fileProblem = String(match[2] || "").trim();
+                const fileLang = String(match[3] || "").trim();
+                if (!problemInput || fileProblem === problemInput) {
+                    return this.normalizeSolutionLanguage(fileLang);
+                }
+            }
+        }
+        const configLang = ConfigUtils_1.getVsCodeConfig().get("defaultLanguage", "cpp");
+        return this.normalizeSolutionLanguage(configLang || "cpp");
+    }
+    getCurrentSolutionLanguageLabel() {
+        return this.getSolutionLanguageLabel(this.getCurrentSolutionLanguage());
+    }
+    getSolutionLanguageLabel(lang) {
+        const labels = {
+            bash: "Bash",
+            c: "C",
+            cpp: "C++",
+            csharp: "C#",
+            golang: "Go",
+            java: "Java",
+            javascript: "JavaScript",
+            kotlin: "Kotlin",
+            mysql: "MySQL",
+            php: "PHP",
+            python: "Python",
+            python3: "Python3",
+            ruby: "Ruby",
+            rust: "Rust",
+            scala: "Scala",
+            swift: "Swift",
+            typescript: "TypeScript",
+        };
+        return labels[lang] || lang || "当前语言";
+    }
+    normalizeSolutionLanguage(value) {
+        const raw = String(value || "").trim();
+        if (!raw) {
+            return "";
+        }
+        const lower = raw.toLowerCase();
+        const compact = lower
+            .replace(/&amp;/g, "&")
+            .replace(/#/g, "sharp")
+            .replace(/\+\+/g, "pp")
+            .replace(/[^a-z0-9]+/g, "");
+        const aliases = {
+            "c++": "cpp",
+            cpp: "cpp",
+            cplusplus: "cpp",
+            cplus: "cpp",
+            c: "c",
+            "c#": "csharp",
+            csharp: "csharp",
+            cs: "csharp",
+            golang: "golang",
+            go: "golang",
+            javascript: "javascript",
+            js: "javascript",
+            nodejs: "javascript",
+            typescript: "typescript",
+            ts: "typescript",
+            python3: "python3",
+            python: "python",
+            py3: "python3",
+            py: "python",
+            mysql: "mysql",
+            sql: "mysql",
+            bash: "bash",
+            shell: "bash",
+            sh: "bash",
+            java: "java",
+            kotlin: "kotlin",
+            php: "php",
+            ruby: "ruby",
+            rust: "rust",
+            scala: "scala",
+            swift: "swift",
+        };
+        return aliases[lower] || aliases[compact] || (ConstDefind_1.AllProgramLanguage.includes(compact) ? compact : compact);
+    }
+    solutionLanguageCandidates(item) {
+        const tags = [];
+        const push = (value) => {
+            if (value === undefined || value === null) {
+                return;
+            }
+            if (Array.isArray(value)) {
+                value.forEach(push);
+                return;
+            }
+            if (typeof value === "object") {
+                push(value.slug || value.name || value.translatedName || value.nameTranslated || value.title || value.label);
+                return;
+            }
+            tags.push(String(value));
+        };
+        const pushTextLanguages = (value) => {
+            this.extractSolutionLanguagesFromText(value).forEach((lang) => tags.push(lang));
+        };
+        push(item && item.lang);
+        push(item && item.language);
+        push(item && item.tags);
+        push(item && item.tagSlugs);
+        pushTextLanguages(item && item.summary);
+        pushTextLanguages(item && item.title);
+        return tags
+            .map((value) => this.normalizeSolutionLanguage(value))
+            .filter(Boolean);
+    }
+    extractSolutionLanguagesFromText(value) {
+        const text = String(value || "");
+        if (!text) {
+            return [];
+        }
+        const result = [];
+        const patterns = [
+            ["cpp", /(?:^|[^A-Za-z0-9])(?:c\+\+|cpp|c plus plus)(?=$|[^A-Za-z0-9])/i],
+            ["csharp", /(?:^|[^A-Za-z0-9])(?:c#|csharp|c sharp)(?=$|[^A-Za-z0-9])/i],
+            ["golang", /(?:^|[^A-Za-z0-9])(?:go|golang)(?=$|[^A-Za-z0-9])/i],
+            ["javascript", /(?:^|[^A-Za-z0-9])(?:javascript|js)(?=$|[^A-Za-z0-9])/i],
+            ["typescript", /(?:^|[^A-Za-z0-9])(?:typescript|ts)(?=$|[^A-Za-z0-9])/i],
+            ["python3", /(?:^|[^A-Za-z0-9])(?:python3|py3)(?=$|[^A-Za-z0-9])/i],
+            ["python", /(?:^|[^A-Za-z0-9])(?:python|py)(?=$|[^A-Za-z0-9])/i],
+            ["mysql", /(?:^|[^A-Za-z0-9])(?:mysql|sql)(?=$|[^A-Za-z0-9])/i],
+            ["bash", /(?:^|[^A-Za-z0-9])(?:bash|shell|sh)(?=$|[^A-Za-z0-9])/i],
+            ["java", /(?:^|[^A-Za-z0-9])java(?=$|[^A-Za-z0-9])/i],
+            ["c", /(?:^|[^A-Za-z0-9])c(?=$|[^A-Za-z0-9])/i],
+            ["kotlin", /(?:^|[^A-Za-z0-9])kotlin(?=$|[^A-Za-z0-9])/i],
+            ["php", /(?:^|[^A-Za-z0-9])php(?=$|[^A-Za-z0-9])/i],
+            ["ruby", /(?:^|[^A-Za-z0-9])ruby(?=$|[^A-Za-z0-9])/i],
+            ["rust", /(?:^|[^A-Za-z0-9])rust(?=$|[^A-Za-z0-9])/i],
+            ["scala", /(?:^|[^A-Za-z0-9])scala(?=$|[^A-Za-z0-9])/i],
+            ["swift", /(?:^|[^A-Za-z0-9])swift(?=$|[^A-Za-z0-9])/i],
+        ];
+        patterns.forEach(([lang, pattern]) => {
+            if (pattern.test(text)) {
+                result.push(lang);
+            }
+        });
+        return result;
+    }
+    getSolutionLanguage(item) {
+        const candidates = this.solutionLanguageCandidates(item);
+        const known = new Set(ConstDefind_1.AllProgramLanguage.concat(["golang"]));
+        return candidates.find((lang) => known.has(lang)) || "";
+    }
+    isCurrentLanguageSolution(item) {
+        const wanted = this.getCurrentSolutionLanguage();
+        if (!wanted) {
+            return true;
+        }
+        const candidates = this.solutionLanguageCandidates(item);
+        if (!candidates.length) {
+            return false;
+        }
+        const wantedGroup = new Set([wanted]);
+        if (wanted === "python3") {
+            wantedGroup.add("python");
+        }
+        if (wanted === "python") {
+            wantedGroup.add("python3");
+        }
+        return candidates.some((lang) => wantedGroup.has(lang));
+    }
+    filteredSolutionList() {
+        const state = this.state.solutions || {};
+        const list = state.list || [];
+        if (!state.currentLanguageOnly) {
+            return list;
+        }
+        return list.filter((item) => this.isCurrentLanguageSolution(item));
+    }
+    collapseOtherLanguageSections(html) {
+        const source = String(html || "");
+        const wanted = this.getCurrentSolutionLanguage();
+        if (!source || !wanted) {
+            return source;
+        }
+        const withCodeSections = this.wrapSolutionLanguageCodeBlocks(source, wanted);
+        return this.wrapSolutionLanguageHeadingSections(withCodeSections, wanted);
+    }
+    wrapSolutionLanguageCodeBlocks(html, wanted) {
+        const source = String(html || "");
+        const codeBlockPattern = /<pre\b[^>]*>\s*<code\b([^>]*)>[\s\S]*?<\/code>\s*<\/pre>/gi;
+        const pieces = [];
+        let cursor = 0;
+        let match;
+        while ((match = codeBlockPattern.exec(source))) {
+            const block = match[0];
+            const attrs = match[1];
+            const lang = this.detectCodeBlockLanguage(attrs);
+            if (!lang) {
+                continue;
+            }
+            pieces.push({
+                index: match.index,
+                end: codeBlockPattern.lastIndex,
+                html: block,
+                lang,
+            });
+        }
+        if (!pieces.length) {
+            return source;
+        }
+        let result = "";
+        const flushGroup = (group) => {
+            if (!group.length) {
+                return;
+            }
+            result += this.renderSolutionLanguageTabs(group, wanted);
+        };
+        let group = [];
+        pieces.forEach((piece) => {
+            const between = source.slice(cursor, piece.index);
+            if (group.length && between.trim()) {
+                flushGroup(group);
+                group = [];
+                result += between;
+            }
+            else if (!group.length) {
+                result += between;
+            }
+            group.push(piece);
+            cursor = piece.end;
+        });
+        flushGroup(group);
+        result += source.slice(cursor);
+        return result;
+    }
+    renderSolutionLanguageTabs(group, wanted) {
+        const sorted = group.slice().sort((a, b) => {
+            const aCurrent = this.solutionLanguageMatches(a.lang, wanted);
+            const bCurrent = this.solutionLanguageMatches(b.lang, wanted);
+            if (aCurrent !== bCurrent) {
+                return aCurrent ? -1 : 1;
+            }
+            return a.index - b.index;
+        });
+        const active = sorted.findIndex((item) => this.solutionLanguageMatches(item.lang, wanted));
+        const activeIndex = active >= 0 ? active : 0;
+        const groupId = `solution-language-tabs-${group[0] ? group[0].index : 0}-${sorted.map((item) => this.normalizeSolutionLanguage(item.lang)).join("-")}-${activeIndex}`;
+        const tabs = sorted.map((item, index) => {
+            const selected = index === activeIndex;
+            const current = this.solutionLanguageMatches(item.lang, wanted);
+            const label = this.getSolutionLanguageLabel(item.lang);
+            return `<button id="${this.escapeAttr(groupId)}-tab-${index}" class="solution-language-tab${selected ? " active" : ""}${current ? " current" : ""}" type="button" role="tab" aria-selected="${selected ? "true" : "false"}" aria-controls="${this.escapeAttr(groupId)}-panel-${index}" data-solution-tab="${index}">
+  <span class="solution-language-label">${this.escapeHtml(label)}</span>${current ? `<span class="solution-language-current">当前语言</span>` : ""}
+</button>`;
+        }).join("");
+        const panels = sorted.map((item, index) => {
+            const selected = index === activeIndex;
+            return `<div id="${this.escapeAttr(groupId)}-panel-${index}" class="solution-language-panel${selected ? " active" : ""}" role="tabpanel" aria-labelledby="${this.escapeAttr(groupId)}-tab-${index}" data-solution-panel="${index}" ${selected ? "" : "hidden"}>
+  ${item.html}
+</div>`;
+        }).join("");
+        return `<section class="solution-language-tabs" data-solution-tabs>
+  <div class="solution-language-tablist" role="tablist">${tabs}</div>
+  <div class="solution-language-tabpanels">${panels}</div>
+</section>`;
+    }
+    detectCodeBlockLanguage(attrs) {
+        const rawAttrs = String(attrs || "");
+        const classMatch = rawAttrs.match(/\bclass\s*=\s*(["'])([\s\S]*?)\1/i);
+        const classNames = classMatch ? String(classMatch[2] || "").split(/\s+/) : [];
+        const candidates = [];
+        classNames.forEach((className) => {
+            const languageMatch = className.match(/^(?:language|lang)-(.+)$/i);
+            candidates.push(languageMatch ? languageMatch[1] : className);
+        });
+        for (const candidate of candidates) {
+            const lang = this.normalizeSolutionLanguage(candidate);
+            if (this.isKnownSolutionLanguage(lang)) {
+                return lang;
+            }
+        }
+        return "";
+    }
+    isKnownSolutionLanguage(lang) {
+        return ConstDefind_1.AllProgramLanguage.includes(String(lang || ""));
+    }
+    wrapSolutionLanguageHeadingSections(html, wanted) {
+        const source = String(html || "");
+        const headingPattern = /<h([2-4])\b[^>]*>[\s\S]*?<\/h\1>/gi;
+        const headings = [];
+        let match;
+        while ((match = headingPattern.exec(source))) {
+            const lang = this.detectHeadingLanguage(match[0]);
+            headings.push({
+                index: match.index,
+                end: headingPattern.lastIndex,
+                level: Number(match[1]),
+                html: match[0],
+                lang,
+            });
+        }
+        const matches = headings.filter((heading) => heading.lang);
+        if (!matches.length) {
+            return source;
+        }
+        let result = "";
+        let cursor = 0;
+        matches.forEach((section) => {
+            const headingIndex = headings.findIndex((item) => item.index === section.index);
+            const next = headings.slice(headingIndex + 1).find((item) => item.level <= section.level);
+            const sectionEnd = next ? next.index : source.length;
+            if (section.index < cursor) {
+                return;
+            }
+            result += source.slice(cursor, section.index);
+            const body = source.slice(section.end, sectionEnd);
+            const open = this.solutionLanguageMatches(section.lang, wanted);
+            result += `<details class="solution-language-section" data-solution-lang="${this.escapeAttr(section.lang)}" ${open ? "open" : ""}>
+  <summary>${this.headingInnerHtml(section.html)}</summary>
+  <div class="solution-language-body">${body}</div>
+</details>`;
+            cursor = sectionEnd;
+        });
+        result += source.slice(cursor);
+        return result;
+    }
+    detectHeadingLanguage(headingHtml) {
+        const text = this.htmlToPlainText(headingHtml).replace(/\s+/g, " ").trim();
+        if (!text) {
+            return "";
+        }
+        const languages = this.extractSolutionLanguagesFromText(text);
+        if (!languages.length) {
+            return "";
+        }
+        const compact = text.toLowerCase().replace(/\s+/g, "");
+        const languageOnly = /^(?:c\+\+|cpp|c|c#|csharp|java|go|golang|javascript|js|typescript|ts|python3|python|py3|py|mysql|sql|bash|shell|sh|kotlin|php|ruby|rust|scala|swift)(?:代码|题解|解法|思路|方法|solution|code|approach|method)?$/i.test(compact);
+        const hasLanguageCue = /代码|题解|解法|语言|实现|思路|方法|solution|code|approach|method|implementation/i.test(text);
+        return languageOnly || hasLanguageCue ? languages[0] : "";
+    }
+    headingInnerHtml(headingHtml) {
+        const match = String(headingHtml || "").match(/^<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>$/i);
+        return match ? match[1] : this.escapeHtml(this.htmlToPlainText(headingHtml));
+    }
+    solutionLanguageMatches(actual, wanted) {
+        const normalizedActual = this.normalizeSolutionLanguage(actual);
+        const normalizedWanted = this.normalizeSolutionLanguage(wanted);
+        if (!normalizedActual || !normalizedWanted) {
+            return false;
+        }
+        if (normalizedActual === normalizedWanted) {
+            return true;
+        }
+        return (normalizedActual === "python" && normalizedWanted === "python3") || (normalizedActual === "python3" && normalizedWanted === "python");
     }
     getChildCall() {
         return BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance();
@@ -474,6 +929,118 @@ body .submission-code code.hljs .hljs-strong {
             };
         }
         this.revealAndRender(true);
+    }
+    async loadSolutionArticles(options = {}) {
+        const problemInput = this.getProblemInput();
+        const reset = !!options.reset;
+        let state = this.state.solutions;
+        if (!problemInput) {
+            state.error = "当前题目缺少题号，无法读取题解讨论。";
+            this.revealAndRender(true);
+            return;
+        }
+        if (reset || this.isSolutionsStale(problemInput)) {
+            this.resetSolutions(problemInput);
+            state = this.state.solutions;
+        }
+        const first = state.first || 20;
+        const skip = reset ? 0 : (state.list || []).length;
+        state.problemInput = problemInput;
+        state.loading = true;
+        state.error = "";
+        if (reset) {
+            state.list = [];
+            state.detail = undefined;
+            state.total = 0;
+            state.skip = 0;
+            this.state.solution = undefined;
+        }
+        this.state.activeTab = "solution";
+        this.revealAndRender(true);
+        try {
+            const lang = state.currentLanguageOnly ? this.getCurrentSolutionLanguage() : "";
+            const raw = await this.getChildCall().getSolutionArticles(problemInput, { skip, first, lang });
+            if (this.getProblemInput() !== problemInput || this.state.solutions !== state) {
+                return;
+            }
+            const payload = this.parseJsonResponse(raw);
+            if (payload.code !== 100) {
+                throw new Error(String(payload.error || payload.msg || raw || "题解讨论读取失败"));
+            }
+            const incoming = Array.isArray(payload.articles) ? payload.articles : [];
+            const existing = reset ? [] : (state.list || []);
+            const seen = new Set(existing.map((item) => String(item.slug || "")));
+            const merged = existing.concat(incoming.filter((item) => {
+                const slug = String(item.slug || "");
+                if (!slug || seen.has(slug)) {
+                    return false;
+                }
+                seen.add(slug);
+                return true;
+            }));
+            state.list = merged;
+            state.total = Number(payload.total || merged.length) || merged.length;
+            state.skip = Number(payload.skip || skip) || skip;
+            state.first = Number(payload.first || first) || first;
+        }
+        catch (error) {
+            if (this.getProblemInput() !== problemInput || this.state.solutions !== state) {
+                return;
+            }
+            state.error = error && error.message ? error.message : String(error || "题解讨论读取失败");
+        }
+        finally {
+            if (this.getProblemInput() !== problemInput || this.state.solutions !== state) {
+                return;
+            }
+            state.loading = false;
+            this.state.activeTab = "solution";
+            this.revealAndRender(true);
+        }
+    }
+    async loadSolutionArticleDetail(slug) {
+        const problemInput = this.getProblemInput();
+        const articleSlug = String(slug || "").trim();
+        let state = this.state.solutions;
+        if (!problemInput || !articleSlug) {
+            return;
+        }
+        if (this.isSolutionsStale(problemInput)) {
+            this.resetSolutions(problemInput);
+            state = this.state.solutions;
+        }
+        state.problemInput = problemInput;
+        state.loading = true;
+        state.error = "";
+        this.state.activeTab = "solution";
+        this.revealAndRender(true);
+        try {
+            const raw = await this.getChildCall().getSolutionArticleDetail(problemInput, articleSlug);
+            if (this.getProblemInput() !== problemInput || this.state.solutions !== state) {
+                return;
+            }
+            const payload = this.parseJsonResponse(raw);
+            if (payload.code !== 100) {
+                throw new Error(String(payload.error || payload.msg || raw || "题解讨论详情读取失败"));
+            }
+            const base = (state.list || []).find((item) => String(item.slug || "") === articleSlug) || {};
+            state.detail = Object.assign({}, base, payload.article || {});
+            this.state.solution = state.detail;
+        }
+        catch (error) {
+            if (this.getProblemInput() !== problemInput || this.state.solutions !== state) {
+                return;
+            }
+            state.error = error && error.message ? error.message : String(error || "题解讨论详情读取失败");
+        }
+        finally {
+            if (this.getProblemInput() !== problemInput || this.state.solutions !== state) {
+                return;
+            }
+            state.loading = false;
+            this.state.activeTab = "solution";
+            this.revealAndRender(true);
+        }
     }
     async loadSubmissions() {
         const problemInput = this.getProblemInput();
@@ -652,6 +1219,27 @@ body .submission-code code.hljs .hljs-strong {
             case "showSubmissions":
                 this.showSubmissions();
                 break;
+            case "showSolutions":
+                this.showSolutions();
+                break;
+            case "refreshSolutions":
+                this.loadSolutionArticles({ reset: true });
+                break;
+            case "loadMoreSolutions":
+                this.loadSolutionArticles({ reset: false });
+                break;
+            case "toggleSolutionCurrentLanguage":
+                this.toggleSolutionCurrentLanguage();
+                break;
+            case "selectSolutionArticle":
+                this.loadSolutionArticleDetail(message.slug);
+                break;
+            case "backSolutions":
+                this.state.solutions.detail = undefined;
+                this.state.solution = undefined;
+                this.state.activeTab = "solution";
+                this.revealAndRender(true);
+                break;
             case "refreshSubmissions":
                 this.loadSubmissions();
                 break;
@@ -669,6 +1257,8 @@ body .submission-code code.hljs .hljs-strong {
                 break;
             case "showDescription":
                 this.state.submissions.detail = undefined;
+                this.state.solutions.detail = undefined;
+                this.state.solution = undefined;
                 this.state.activeTab = this.state.description ? "description" : "empty";
                 this.revealAndRender(true);
                 break;
@@ -816,7 +1406,7 @@ body .submission-code code.hljs .hljs-strong {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: ${webview.cspSource}; script-src 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">
+	  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: ${webview.cspSource}; media-src https: ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">
 	  ${builtinStyles}
 	  <link rel="stylesheet" type="text/css" href="${katexCssUri}">
 	  ${this.getStyle()}
@@ -1165,6 +1755,24 @@ body .submission-code code.hljs .hljs-strong {
         }
         return;
       }
+      const solutionTab = clicked.closest('[data-solution-tab]');
+      if (solutionTab) {
+        const root = solutionTab.closest('[data-solution-tabs]');
+        if (root) {
+          const index = solutionTab.getAttribute('data-solution-tab');
+          root.querySelectorAll('[data-solution-tab]').forEach((tab) => {
+            const selected = tab.getAttribute('data-solution-tab') === index;
+            tab.classList.toggle('active', selected);
+            tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+          });
+          root.querySelectorAll('[data-solution-panel]').forEach((panel) => {
+            const selected = panel.getAttribute('data-solution-panel') === index;
+            panel.classList.toggle('active', selected);
+            panel.hidden = !selected;
+          });
+        }
+        return;
+      }
       const filterToggle = clicked.closest('[data-filter-toggle]');
       if (filterToggle) {
         const root = filterToggle.closest('[data-filter-root]');
@@ -1192,6 +1800,8 @@ body .submission-code code.hljs .hljs-strong {
       const command = target.getAttribute('data-command');
       if (command === 'selectSubmission') {
         vscode.postMessage({ command, id: target.getAttribute('data-id') });
+      } else if (command === 'selectSolutionArticle') {
+        vscode.postMessage({ command, slug: target.getAttribute('data-slug') });
       } else if (command === 'switchDescriptionLanguage') {
         vscode.postMessage({ command, mode: target.getAttribute('data-mode') });
       } else if (command === 'saveSubmissionNote') {
@@ -1257,7 +1867,7 @@ body .submission-code code.hljs .hljs-strong {
         if (this.state.activeTab === "description" && this.state.descriptionStatus) {
             return "description";
         }
-        if (this.state.activeTab === "solution" && this.state.solution) {
+        if (this.state.activeTab === "solution" && (this.state.node || this.state.solution)) {
             return "solution";
         }
         if (this.state.activeTab === "hints" && this.state.hints) {
@@ -1333,8 +1943,7 @@ body .submission-code code.hljs .hljs-strong {
             return this.renderBilingualDescription();
         }
         const links = [
-            `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getSolutionLink(d.url))}">题解</a>`,
-            `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getDiscussionLink(d.url))}">讨论</a>`,
+            `<button class="lcpr-secondary-link" data-command="showSolutions">题解讨论</button>`,
             `<button class="lcpr-secondary-link" data-command="showSubmissions">提交记录</button>`,
         ].join("");
         return `<article class="lcpr-pane lcpr-markdown">
@@ -1354,20 +1963,13 @@ body .submission-code code.hljs .hljs-strong {
             return this.renderEmpty("双语题面还没有加载完成。");
         }
         const links = [
-            `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getSolutionLink(d.url))}">题解</a>`,
-            `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getDiscussionLink(d.url))}">讨论</a>`,
+            `<button class="lcpr-secondary-link" data-command="showSolutions">题解讨论</button>`,
             `<button class="lcpr-secondary-link" data-command="showSubmissions">提交记录</button>`,
         ].join("");
+        const rows = this.renderBilingualRows(zh.body || "", en.body || "");
         return `<article class="lcpr-pane lcpr-markdown">
   <div class="lcpr-bilingual">
-    <section class="lcpr-bilingual-section">
-      <div class="lcpr-bilingual-label">中文</div>
-      <div class="lcpr-body">${this.refineProblemBody(zh.body || "")}</div>
-    </section>
-    <section class="lcpr-bilingual-section">
-      <div class="lcpr-bilingual-label">English</div>
-      <div class="lcpr-body">${this.refineProblemBody(en.body || "")}</div>
-    </section>
+    ${rows}
   </div>
   ${this.renderInlineHints()}
   <div class="lcpr-meta-footer">
@@ -1375,6 +1977,253 @@ body .submission-code code.hljs .hljs-strong {
     ${this.renderTargets(d)}
   </div>
 </article>`;
+    }
+    renderBilingualRows(zhBody, enBody) {
+        const zhBlocks = this.segmentProblemBody(zhBody, "zh");
+        const enBlocks = this.segmentProblemBody(enBody, "en");
+        const pairs = this.alignBilingualBlocks(zhBlocks, enBlocks);
+        if (!pairs.length) {
+            return `<section class="lcpr-bilingual-pair">
+  <div class="lcpr-bilingual-side">
+    <div class="lcpr-bilingual-label">中文</div>
+    <div class="lcpr-body">${this.refineProblemBody(zhBody || "")}</div>
+  </div>
+  <div class="lcpr-bilingual-side">
+    <div class="lcpr-bilingual-label">EN</div>
+    <div class="lcpr-body">${this.refineProblemBody(enBody || "")}</div>
+  </div>
+</section>`;
+        }
+        return pairs.map((pair) => {
+            const zhHtml = pair.zh.map((block) => block.html).join("");
+            const enHtml = pair.en.map((block) => block.html).join("");
+            const className = `lcpr-bilingual-pair${pair.zh.length && pair.en.length ? "" : " is-unmatched"}`;
+            return `<section class="${className}">
+  ${zhHtml ? `<div class="lcpr-bilingual-side">
+    <div class="lcpr-bilingual-label">中文</div>
+    <div class="lcpr-body">${this.refineProblemBody(zhHtml)}</div>
+  </div>` : ""}
+  ${enHtml ? `<div class="lcpr-bilingual-side">
+    <div class="lcpr-bilingual-label">EN</div>
+    <div class="lcpr-body">${this.refineProblemBody(enHtml)}</div>
+  </div>` : ""}
+</section>`;
+        }).join("");
+    }
+    segmentProblemBody(body, lang) {
+        const source = String(body || "").trim();
+        if (!source) {
+            return [];
+        }
+        const blocks = [];
+        const pattern = /<(h[1-6]|p|pre|ul|ol|table|blockquote|figure)\b[\s\S]*?<\/\1>|<img\b[^>]*\/?>/gi;
+        let lastIndex = 0;
+        let match;
+        const pushBlock = (html) => {
+            const clean = String(html || "").trim();
+            const isImage = /^<img\b/i.test(clean);
+            if (!clean || (!isImage && !this.htmlToPlainText(clean).trim())) {
+                return;
+            }
+            blocks.push(this.describeBilingualBlock(clean, lang, blocks.length));
+        };
+        while ((match = pattern.exec(source))) {
+            pushBlock(source.slice(lastIndex, match.index));
+            pushBlock(match[0]);
+            lastIndex = pattern.lastIndex;
+        }
+        pushBlock(source.slice(lastIndex));
+        if (!blocks.length && this.htmlToPlainText(source).trim()) {
+            blocks.push(this.describeBilingualBlock(source, lang, 0));
+        }
+        return this.annotateBilingualImageExamples(blocks);
+    }
+    describeBilingualBlock(html, lang, index) {
+        const fallbackText = /^<img\b/i.test(String(html || ""))
+            ? [this.extractHtmlAttr(html, "alt"), this.extractHtmlAttr(html, "src")].filter(Boolean).join(" ")
+            : "";
+        const text = (this.htmlToPlainText(html) || fallbackText).replace(/\s+/g, " ").trim();
+        const tagMatch = String(html || "").match(/^<\s*([a-z0-9]+)/i);
+        const tag = tagMatch ? tagMatch[1].toLowerCase() : "text";
+        const anchor = this.bilingualAnchor(text);
+        const tokens = this.bilingualTokens(text);
+        return {
+            html,
+            lang,
+            index,
+            tag,
+            text,
+            anchor,
+            tokens,
+            length: this.bilingualLength(text),
+        };
+    }
+    annotateBilingualImageExamples(blocks) {
+        let currentExample = "";
+        return (blocks || []).map((block) => {
+            const match = String(block.anchor || "").match(/^example:(\d+)/);
+            if (match) {
+                currentExample = match[1];
+            }
+            if (block.tag === "img" && currentExample && !this.extractHtmlAttr(block.html, "data-lcpr-example")) {
+                block.html = String(block.html || "").replace(/^<img\b/i, `<img data-lcpr-example="${this.escapeAttr(currentExample)}"`);
+            }
+            return block;
+        });
+    }
+    bilingualAnchor(text) {
+        const value = String(text || "").trim();
+        const lower = value.toLowerCase();
+        const example = value.match(/^(?:示例|例)\s*(\d+)|^example\s*(\d+)/i);
+        if (example) {
+            return `example:${example[1] || example[2] || ""}`;
+        }
+        if (/^(?:约束|限制条件|constraints?)\b/i.test(value) || /^提示\s*[:：]?$/.test(value)) {
+            return "constraints";
+        }
+        if (/^(?:进阶|follow[-\s]?up)\b/i.test(value)) {
+            return "follow-up";
+        }
+        if (/^(?:输入|input)\s*[:：]/i.test(value)) {
+            return "input";
+        }
+        if (/^(?:输出|output)\s*[:：]/i.test(value)) {
+            return "output";
+        }
+        if (/^(?:解释|explanation)\s*[:：]/i.test(value)) {
+            return "explanation";
+        }
+        if (/^note\b/i.test(lower) || /^注意\s*[:：]?/.test(value)) {
+            return "note";
+        }
+        return "";
+    }
+    bilingualTokens(text) {
+        const tokens = new Set();
+        const value = String(text || "");
+        for (const match of value.matchAll(/`([^`]+)`|<code[^>]*>([\s\S]*?)<\/code>|[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[<>=!]=?|∞/g)) {
+            const token = this.htmlToPlainText(match[1] || match[2] || match[0] || "").trim().toLowerCase();
+            if (token) {
+                tokens.add(token);
+            }
+        }
+        return tokens;
+    }
+    bilingualLength(text) {
+        const value = String(text || "");
+        const cjk = (value.match(/[\u3400-\u9fff]/g) || []).length;
+        const latinWords = (value.match(/[A-Za-z]+/g) || []).length;
+        const numbers = (value.match(/\d+(?:\.\d+)?/g) || []).length;
+        const symbols = (value.match(/[<>=+\-*/%()[\]{}]/g) || []).length;
+        return Math.max(1, cjk * 1.7 + latinWords * 3.2 + numbers * 1.4 + symbols * 0.6);
+    }
+    alignBilingualBlocks(zhBlocks, enBlocks) {
+        const m = zhBlocks.length;
+        const n = enBlocks.length;
+        if (!m && !n) {
+            return [];
+        }
+        const transitions = [
+            [1, 1],
+            [1, 2],
+            [2, 1],
+            [2, 2],
+            [1, 0],
+            [0, 1],
+        ];
+        const dp = Array.from({ length: m + 1 }, () => Array.from({ length: n + 1 }, () => ({ cost: Infinity, prev: undefined })));
+        dp[0][0] = { cost: 0, prev: undefined };
+        for (let i = 0; i <= m; i += 1) {
+            for (let j = 0; j <= n; j += 1) {
+                const current = dp[i][j];
+                if (!Number.isFinite(current.cost)) {
+                    continue;
+                }
+                for (const [takeZh, takeEn] of transitions) {
+                    if (i + takeZh > m || j + takeEn > n) {
+                        continue;
+                    }
+                    if (!takeZh && !takeEn) {
+                        continue;
+                    }
+                    const zh = zhBlocks.slice(i, i + takeZh);
+                    const en = enBlocks.slice(j, j + takeEn);
+                    const cost = current.cost + this.bilingualAlignmentCost(zh, en);
+                    if (cost < dp[i + takeZh][j + takeEn].cost) {
+                        dp[i + takeZh][j + takeEn] = { cost, prev: { i, j, takeZh, takeEn } };
+                    }
+                }
+            }
+        }
+        const pairs = [];
+        let i = m;
+        let j = n;
+        while (i > 0 || j > 0) {
+            const prev = dp[i][j].prev;
+            if (!prev) {
+                break;
+            }
+            pairs.push({
+                zh: zhBlocks.slice(prev.i, prev.i + prev.takeZh),
+                en: enBlocks.slice(prev.j, prev.j + prev.takeEn),
+            });
+            i = prev.i;
+            j = prev.j;
+        }
+        return pairs.reverse();
+    }
+    bilingualAlignmentCost(zhGroup, enGroup) {
+        if (!zhGroup.length || !enGroup.length) {
+            const group = zhGroup.length ? zhGroup : enGroup;
+            return 5 + group.reduce((sum, block) => sum + Math.min(2, block.length / 80), 0);
+        }
+        const zhText = zhGroup.map((block) => block.text).join(" ");
+        const enText = enGroup.map((block) => block.text).join(" ");
+        const zhLength = zhGroup.reduce((sum, block) => sum + block.length, 0);
+        const enLength = enGroup.reduce((sum, block) => sum + block.length, 0);
+        const lengthCost = Math.abs(Math.log((zhLength + 1) / (enLength + 1))) * 1.2;
+        const zhAnchors = zhGroup.map((block) => block.anchor).filter(Boolean);
+        const enAnchors = enGroup.map((block) => block.anchor).filter(Boolean);
+        const anchorMatch = zhAnchors.some((anchor) => enAnchors.includes(anchor));
+        const anchorMismatch = zhAnchors.length && enAnchors.length && !anchorMatch;
+        const zhTags = new Set(zhGroup.map((block) => block.tag));
+        const enTags = new Set(enGroup.map((block) => block.tag));
+        const tagOverlap = [...zhTags].some((tag) => enTags.has(tag));
+        const tokenScore = this.bilingualTokenOverlap(zhGroup, enGroup);
+        let cost = lengthCost;
+        if (anchorMatch) {
+            cost -= 2.2;
+        }
+        if (anchorMismatch) {
+            cost += 4.5;
+        }
+        if (!tagOverlap) {
+            cost += 1.1;
+        }
+        cost -= tokenScore * 1.6;
+        if (zhGroup.length !== enGroup.length) {
+            cost += 0.55;
+        }
+        if (!zhText || !enText) {
+            cost += 0.8;
+        }
+        return Math.max(0.05, cost);
+    }
+    bilingualTokenOverlap(zhGroup, enGroup) {
+        const zhTokens = new Set();
+        const enTokens = new Set();
+        zhGroup.forEach((block) => block.tokens.forEach((token) => zhTokens.add(token)));
+        enGroup.forEach((block) => block.tokens.forEach((token) => enTokens.add(token)));
+        if (!zhTokens.size || !enTokens.size) {
+            return 0;
+        }
+        let common = 0;
+        zhTokens.forEach((token) => {
+            if (enTokens.has(token)) {
+                common += 1;
+            }
+        });
+        return common / Math.max(zhTokens.size, enTokens.size);
     }
     renderDescriptionStatus() {
         const status = this.state.descriptionStatus || {};
@@ -1386,27 +2235,106 @@ body .submission-code code.hljs .hljs-strong {
   <div class="lcpr-load-state ${status.loading ? "loading" : "error"}">
     <div class="lcpr-load-title">${this.escapeHtml(title)}</div>
     <p>${this.escapeHtml(detail)}</p>
-  </div>
-</article>`;
+	  </div>
+	</article>`;
+    }
+    formatCompactCount(value) {
+        const number = Number(value);
+        if (Number.isFinite(number) && number > 0) {
+            if (number >= 100000000) {
+                return `${(number / 100000000).toFixed(number >= 1000000000 ? 0 : 1).replace(/\.0$/, "")}亿`;
+            }
+            if (number >= 10000) {
+                return `${(number / 10000).toFixed(number >= 100000 ? 0 : 1).replace(/\.0$/, "")}万`;
+            }
+            return String(Math.round(number));
+        }
+        return "";
     }
     renderSolution() {
-        const s = this.state.solution;
+        const state = this.state.solutions || {};
+        const s = state.detail || this.state.solution;
         if (!s) {
-            return this.renderEmpty("还没有题解。");
+            return this.renderSolutionList();
         }
         const auth = s.is_cn ? `https://leetcode.cn/u/${s.author}/` : `https://leetcode.com/${s.author}/`;
-        const body = this.prepareProblemImages(MarkdownService_1.markdownService.render(s.body || "", {
+        const reads = this.formatCompactCount(s.views || s.hitCount);
+        const renderedBody = this.prepareProblemImages(MarkdownService_1.markdownService.render(s.body || "", {
             lang: s.lang,
-            host: "https://discuss.leetcode.com/",
+            host: s.is_cn ? "https://leetcode.cn/" : "https://discuss.leetcode.com/",
+            articleUrl: s.url,
         }));
+        const body = this.collapseOtherLanguageSections(renderedBody);
         return `<article class="lcpr-pane lcpr-markdown">
-  <div class="lcpr-section-meta">
-    <span>${this.escapeHtml(s.lang || "-")}</span>
-    <a href="${this.escapeAttr(auth)}">${this.escapeHtml(s.author || "-")}</a>
-    <span>${this.escapeHtml(s.votes || "0")} votes</span>
-  </div>
-  <div class="lcpr-body">${body}</div>
+  <section class="solution-detail-view">
+    <div class="solution-detail-nav">
+      ${this.state.node ? `<button class="lcpr-plain-button" data-command="backSolutions">返回讨论</button>` : `<span></span>`}
+      <div class="submission-title-actions">
+        ${this.state.node ? `<button class="lcpr-plain-button" data-command="showDescription">返回题目</button>` : ""}
+        ${this.state.node ? `<button class="lcpr-plain-button" data-command="refreshSolutions">刷新</button>` : ""}
+      </div>
+    </div>
+    <div class="solution-detail-head">
+      <h2>${this.escapeHtml(s.title || "题解讨论")}</h2>
+      <div class="lcpr-section-meta">
+        ${s.lang ? `<span>${this.escapeHtml(s.lang)}</span>` : ""}
+        ${s.byLeetcode ? `<span>官方</span>` : ""}
+        ${s.author ? `<a href="${this.escapeAttr(auth)}">${this.escapeHtml(s.authorName || s.author || "-")}</a>` : ""}
+        ${reads ? `<span>${this.escapeHtml(reads)} 阅读</span>` : ""}
+      </div>
+    </div>
+    <div class="lcpr-body">${body}</div>
+  </section>
 </article>`;
+    }
+    renderSolutionList() {
+        const state = this.state.solutions || {};
+        const list = state.list || [];
+        const visibleList = this.filteredSolutionList();
+        const loaded = list.length;
+        const total = Number(state.total || 0) || loaded;
+        const canLoadMore = !state.loading && total > loaded;
+        const langLabel = this.getCurrentSolutionLanguageLabel();
+        const currentOnly = state.currentLanguageOnly === true;
+        const languageButtonText = currentOnly ? "查看全部" : `只看 ${langLabel}`;
+        const visibleCount = currentOnly ? visibleList.length : loaded;
+        return `<article class="lcpr-pane lcpr-solutions">
+  ${state.error ? `<div class="lcpr-callout lcpr-error">${this.escapeHtml(state.error)}</div>` : ""}
+  ${state.loading ? `<div class="lcpr-loading">正在读取题解讨论...</div>` : ""}
+  <section class="solution-list-view">
+    <div class="submission-titlebar">
+      <div>
+        <div class="submission-title">题解讨论</div>
+        <div class="submission-count">${this.escapeHtml(String(visibleCount))} / ${this.escapeHtml(String(total))}</div>
+      </div>
+      <div class="submission-title-actions">
+        <button class="lcpr-plain-button" data-command="showDescription">返回题目</button>
+        <button class="lcpr-plain-button" data-command="refreshSolutions">刷新</button>
+      </div>
+    </div>
+    <div class="solution-toolbar">
+      <button class="solution-language-toggle${currentOnly ? " current" : ""}" data-command="toggleSolutionCurrentLanguage" aria-pressed="${currentOnly ? "true" : "false"}">
+        ${this.escapeHtml(languageButtonText)}
+      </button>
+    </div>
+    ${visibleList.length ? `<div class="solution-rows">${visibleList.map((item) => this.renderSolutionRow(item)).join("")}</div>` : (!state.loading ? `<div class="lcpr-empty compact"><div class="lcpr-empty-title">${currentOnly ? `暂无 ${this.escapeHtml(langLabel)} 题解讨论` : "暂无题解讨论"}</div><p>${currentOnly ? "可以取消语言筛选，或加载更多题解讨论。" : "力扣中文站没有返回本题的题解讨论。"}</p></div>` : "")}
+    ${canLoadMore ? `<button class="lcpr-action-button solution-more" data-command="loadMoreSolutions">加载更多</button>` : ""}
+  </section>
+</article>`;
+    }
+    renderSolutionRow(item) {
+        const slug = String(item.slug || "");
+        const title = String(item.title || "未命名题解讨论");
+        const author = item.authorName || item.author || "匿名";
+        const reads = this.formatCompactCount(item.views || item.hitCount);
+        const lang = this.getSolutionLanguage(item);
+        return `<button class="solution-row" data-command="selectSolutionArticle" data-slug="${this.escapeAttr(slug)}">
+  <span class="solution-row-main">
+    <span class="solution-row-title">${this.escapeHtml(title)}</span>
+    <span class="solution-row-meta">${item.byLeetcode ? `<span class="solution-badge">官方</span>` : ""}${lang ? `<span class="solution-badge soft">${this.escapeHtml(this.getSolutionLanguageLabel(lang))}</span>` : ""}<span>${this.escapeHtml(author)}</span></span>
+  </span>
+  ${reads ? `<span class="solution-row-votes">${this.escapeHtml(reads)} 阅读</span>` : ""}
+</button>`;
     }
     renderHints() {
         const hints = this.state.hints;
@@ -1691,7 +2619,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
             const image = {
                 src,
                 alt: this.extractHtmlAttr(attrs, "alt"),
-                example: this.inferImageExample(source, offset, imageIndex),
+                example: Number(this.extractHtmlAttr(attrs, "data-lcpr-example")) || this.inferImageExample(source, offset, imageIndex),
                 index: imageIndex,
             };
             const replacement = findDiagramReplacement(pack, image);
@@ -1731,10 +2659,11 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
     }
     parseExampleCode(code) {
         const source = this.htmlToPlainText(code).trim();
-        if (!/(输入|输出|解释)\s*[:：]/.test(source)) {
+        const labelPattern = "(输入|输出|解释|Input|Output|Explanation)";
+        if (!new RegExp(`${labelPattern}\\s*[:：]`, "i").test(source)) {
             return undefined;
         }
-        const matches = [...source.matchAll(/(?:^|\n)\s*(输入|输出|解释)\s*[:：]\s*/g)];
+        const matches = [...source.matchAll(new RegExp(`(?:^|\\n)\\s*${labelPattern}\\s*[:：]\\s*`, "gi"))];
         if (matches.length < 2) {
             return undefined;
         }
@@ -2164,16 +3093,6 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
         }
         return value ? String(value) : "-";
     }
-    getDiscussionLink(url) {
-        const endPoint = (0, ConfigUtils_1.getLeetCodeEndpoint)();
-        if (endPoint === ConstDefind_1.Endpoint.LeetCodeCN) {
-            return String(url || "").replace("/description/", "/comments/");
-        }
-        if (endPoint === ConstDefind_1.Endpoint.LeetCode) {
-            return String(url || "").replace("/description/", "/discuss/?currentPage=1&orderBy=most_votes&query=");
-        }
-        return "https://leetcode.com";
-    }
     getSolutionLink(url) {
         return String(url || "https://leetcode.com").replace("/description/", "/solution/");
     }
@@ -2236,8 +3155,9 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   --lcpr-muted: var(--vscode-descriptionForeground);
   --lcpr-border: var(--vscode-sideBar-border, var(--vscode-widget-border));
   --lcpr-hover: var(--vscode-toolbar-hoverBackground);
-  --lcpr-input: var(--vscode-input-background);
-  --lcpr-code-bg: var(--vscode-textCodeBlock-background, var(--vscode-editor-inactiveSelectionBackground));
+	  --lcpr-input: var(--vscode-input-background);
+	  --lcpr-bg-soft: var(--vscode-editor-inactiveSelectionBackground, var(--lcpr-input));
+	  --lcpr-code-bg: var(--vscode-textCodeBlock-background, var(--vscode-editor-inactiveSelectionBackground));
   --lcpr-reading-font-size: var(--vscode-font-size, 13px);
   --lcpr-success-deep: #137333;
   --lcpr-success: #2ea043;
@@ -2250,8 +3170,9 @@ body.vscode-dark {
   --lcpr-fg: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 94%, #ffffff 6%);
   --lcpr-muted: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 76%, var(--vscode-sideBar-background, #1f2028) 24%);
   --lcpr-border: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 20%, transparent);
-  --lcpr-input: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 84%, #ffffff 10%);
-  --lcpr-code-bg: color-mix(in srgb, var(--vscode-editor-background, #1f2028) 82%, #ffffff 12%);
+	  --lcpr-input: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 84%, #ffffff 10%);
+	  --lcpr-bg-soft: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 78%, #ffffff 8%);
+	  --lcpr-code-bg: color-mix(in srgb, var(--vscode-editor-background, #1f2028) 82%, #ffffff 12%);
   --lcpr-hover: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 72%, #ffffff 15%);
 }
 body.vscode-high-contrast {
@@ -2480,6 +3401,64 @@ h1 a:hover, h1 a:focus, h1 a:active {
   margin: 10px 0;
 }
 .lcpr-markdown a { color: var(--vscode-textLink-foreground); }
+.lcpr-markdown .katex {
+  font-size: 1.08em;
+}
+.lcpr-markdown .katex-display {
+  max-width: 100%;
+  margin: 12px 0;
+  padding: 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+.lcpr-markdown .katex-display > .katex {
+  display: inline-block;
+  max-width: none;
+}
+.lcpr-math-fallback {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin: 12px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--lcpr-fg);
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 1.08em;
+  line-height: 1.45;
+}
+.lcpr-math-prefix,
+.lcpr-math-suffix {
+  flex: 0 0 auto;
+}
+.lcpr-math-brace {
+  flex: 0 0 auto;
+  font-size: 2.6em;
+  line-height: 1;
+}
+.lcpr-math-cases {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lcpr-math-case-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.lcpr-math-case-value {
+  text-align: right;
+}
+.lcpr-math-case-condition {
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 0.95em;
+}
 .lcpr-markdown table {
   display: block;
   width: 100%;
@@ -2536,6 +3515,52 @@ body.vscode-high-contrast .lcpr-markdown img {
   background: transparent;
   filter: none !important;
 }
+.lcpr-video-card {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--lcpr-border);
+  border-radius: 6px;
+  background: var(--lcpr-input);
+}
+.lcpr-video-card video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  border-radius: 4px;
+  background: #000;
+}
+.lcpr-video-body {
+  min-width: 0;
+}
+.lcpr-video-kind {
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+}
+.lcpr-video-title {
+  overflow: hidden;
+  color: var(--lcpr-fg);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lcpr-video-action {
+  flex: 0 0 auto;
+  color: var(--vscode-textLink-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 20px;
+  text-decoration: none;
+}
 .lcpr-diagram {
   --lcpr-diagram-edge: color-mix(in srgb, var(--lcpr-fg) 82%, transparent);
   --lcpr-diagram-text: var(--lcpr-fg);
@@ -2566,21 +3591,36 @@ body.vscode-high-contrast .lcpr-markdown img {
 .lcpr-bilingual {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
 }
-.lcpr-bilingual-section {
+.lcpr-bilingual-pair {
   min-width: 0;
-  padding-top: 2px;
-}
-.lcpr-bilingual-section + .lcpr-bilingual-section {
-  padding-top: 14px;
+  padding: 12px 0;
   border-top: 1px solid var(--lcpr-border);
 }
+.lcpr-bilingual-pair:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.lcpr-bilingual-pair.is-unmatched {
+  opacity: 0.88;
+}
+.lcpr-bilingual-side {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+.lcpr-bilingual-side + .lcpr-bilingual-side {
+  margin-top: 8px;
+}
 .lcpr-bilingual-label {
-  margin-bottom: 8px;
+  padding-top: 2px;
   color: var(--lcpr-muted);
   font-size: 11px;
   font-weight: 700;
+  line-height: 1.4;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -2780,12 +3820,236 @@ body.vscode-high-contrast .lcpr-markdown img {
   border-color: var(--vscode-button-hoverBackground);
   background: var(--vscode-button-hoverBackground);
 }
-.submission-list-view, .submission-detail-view {
+.solution-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.solution-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px 10px 13px;
+  border: 1px solid var(--vscode-input-border, var(--lcpr-border));
+  border-radius: 4px;
+  background: var(--lcpr-input);
+  color: var(--lcpr-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.solution-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 64%, transparent);
+}
+.solution-row:hover {
+  border-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 48%, var(--lcpr-border));
+  background: var(--lcpr-hover);
+}
+.solution-row-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.solution-row-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lcpr-fg);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.solution-row-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+.solution-badge {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground, var(--lcpr-bg));
+  color: var(--lcpr-fg);
+  font-weight: 650;
+}
+.solution-badge.soft {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--lcpr-border);
+  color: var(--lcpr-muted);
+}
+.solution-row-votes {
+  padding-top: 1px;
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.solution-more {
+  margin-top: 2px;
+}
+.solution-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.solution-language-toggle {
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--lcpr-border);
+  border-radius: 4px;
+  background: var(--lcpr-input);
+  color: var(--lcpr-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 26px;
+  cursor: pointer;
+}
+.solution-language-toggle:hover {
+  color: var(--lcpr-fg);
+  background: var(--lcpr-hover);
+}
+.solution-language-toggle.current {
+  color: var(--vscode-button-foreground);
+  border-color: var(--vscode-button-background);
+  background: var(--vscode-button-background);
+}
+.solution-language-tabs {
+  margin: 12px 0;
+  overflow: hidden;
+  border: 1px solid var(--lcpr-border);
+  border-radius: 4px;
+  background: var(--lcpr-bg-soft);
+}
+.solution-language-tablist {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--lcpr-border);
+  background: var(--lcpr-bg);
+}
+.solution-language-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-right: 1px solid var(--lcpr-border);
+  background: transparent;
+  color: var(--lcpr-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 32px;
+  cursor: pointer;
+}
+.solution-language-tab:hover {
+  color: var(--lcpr-fg);
+  background: var(--lcpr-hover);
+}
+.solution-language-tab.active {
+  color: var(--lcpr-fg);
+  background: var(--lcpr-input);
+}
+.solution-language-tab:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+}
+.solution-language-tabpanels {
+  min-width: 0;
+}
+.solution-language-panel {
+  min-width: 0;
+}
+.solution-language-panel[hidden] {
+  display: none !important;
+}
+.solution-language-panel pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.solution-language-section {
+  margin: 12px 0;
+  border: 1px solid var(--lcpr-border);
+  border-radius: 4px;
+  background: var(--lcpr-bg-soft);
+}
+.solution-code-section {
+  background: transparent;
+}
+.solution-language-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 7px 10px;
+  color: var(--lcpr-fg);
+  font-weight: 750;
+  cursor: pointer;
+}
+.solution-language-section > summary:hover {
+  background: var(--lcpr-hover);
+}
+.solution-language-section > summary * {
+  display: inline;
+  margin: 0;
+}
+.solution-language-label {
+  font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+  font-size: 12px;
+}
+.solution-language-current {
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.solution-language-body {
+  padding: 0 10px 10px;
+}
+.solution-code-section > .solution-language-body {
+  padding: 0;
+}
+.solution-code-section pre {
+  margin-top: 0;
+}
+.solution-detail-head h2 {
+  margin: 0 0 8px;
+  color: var(--lcpr-fg);
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.solution-list-view, .solution-detail-view, .submission-list-view, .submission-detail-view {
   display: flex;
   flex-direction: column;
   gap: 9px;
 }
-.submission-titlebar, .submission-detail-nav, .submission-section-head {
+.submission-titlebar, .solution-detail-nav, .submission-detail-nav, .submission-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2884,8 +4148,12 @@ body.vscode-high-contrast .lcpr-markdown img {
 .submission-status-segment:focus-visible,
 .submission-filter-option:focus,
 .submission-filter-option:focus-visible,
+.solution-row:focus,
+.solution-row:focus-visible,
 .submission-row:focus,
 .submission-row:focus-visible,
+.lcpr-solutions .lcpr-plain-button:focus,
+.lcpr-solutions .lcpr-plain-button:focus-visible,
 .lcpr-submissions .lcpr-plain-button:focus,
 .lcpr-submissions .lcpr-plain-button:focus-visible {
   outline: none;
@@ -3496,7 +4764,7 @@ body.vscode-high-contrast .lcpr-markdown img {
   overflow-x: auto;
   overflow-y: hidden;
 }
-${this.buildSubmissionCodeHighlightStyle()}
+${this.buildCompanionCodeHighlightStyle()}
 </style>`;
     }
 }

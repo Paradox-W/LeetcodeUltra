@@ -905,7 +905,7 @@
                     },
                     "leetcode-problem-rating.useVscodeNode": {
                         "type": "boolean",
-                        "default": true,
+                        "default": false,
                         "scope": "machine",
                         "description": "%main.contributes.configuration.properties.leetcode-problem-rating.useVscodeNode.description%"
                     },
@@ -1544,6 +1544,8 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
+        "prepare:debug-profile": "node scripts/prepare-debug-profile.js",
+        "open:sandbox": "npm run prepare:debug-profile && code --new-window --user-data-dir=/Users/paradox/Documents/LeetcodeUltra/.vscode-test/user-data --extensions-dir=/Users/paradox/Documents/LeetcodeUltra/.vscode-test/extensions --extensionDevelopmentPath=/Users/paradox/Documents/LeetcodeUltra /Users/paradox/Documents/Leetcode/Leetcode.code-workspace",
         "test:ai-debug": "npm run compile && node scripts/ai-debug-smoke.js",
         "test:ai-debug:extension": "npm run compile && node scripts/ai-debug-extension-test-runner.js",
         "diagram:author": "node scripts/diagram-author.js",

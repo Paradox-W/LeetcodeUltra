@@ -239,11 +239,18 @@ class StorageUtils {
     const fullpath = this.cacheFile(k);
     if (!this.exist(fullpath)) return null;
 
-    return JSON.parse(this.getData(fullpath));
+    try {
+      const data = this.getData(fullpath);
+      return data === null ? null : JSON.parse(data);
+    } catch (error) {
+      if (error && (error.code === "ENOENT" || error.code === "EISDIR")) return null;
+      throw error;
+    }
   }
 
   public setCache(k, v) {
     const fullpath = this.cacheFile(k);
+    this.mkdir(path.dirname(fullpath));
     this.write(fullpath, JSON.stringify(v));
     return true;
   }
@@ -252,24 +259,37 @@ class StorageUtils {
     const fullpath = this.cacheFile(k);
     if (!this.exist(fullpath)) return false;
 
-    this.rm(fullpath);
+    try {
+      this.rm(fullpath);
+    } catch (error) {
+      if (error && error.code === "ENOENT") return false;
+      throw error;
+    }
     return true;
   }
 
   public listCache(): Array<any> {
     let that = this;
+    if (!this.exist(this.cacheDir())) return [];
     return this.list(this.cacheDir())
       .filter((x) => path.extname(x) === ".json")
       .map(function (filename) {
         const k = path.basename(filename, ".json");
-        const stat = that.stat(that.cacheFile(k));
+        let stat;
+        try {
+          stat = that.stat(that.cacheFile(k));
+        } catch (error) {
+          if (error && error.code === "ENOENT") return null;
+          throw error;
+        }
         return {
           name: k,
           size: stat.size,
           mtime: stat.mtime,
           mtimeMs: stat.mtimeMs,
         };
-      });
+      })
+      .filter(Boolean);
   }
 
   public mkdir(fullpath) {
@@ -278,6 +298,7 @@ class StorageUtils {
   }
 
   public exist(fullpath) {
+    if (typeof fullpath !== "string") return false;
     return fs.existsSync(fullpath);
   }
 

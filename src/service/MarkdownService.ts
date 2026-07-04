@@ -47,7 +47,8 @@ class MarkdownService implements vscode.Disposable {
   }
 
   public render(md: string, env?: any): string {
-    return this.engine.render(md, env);
+    const normalized = this.normalizeMath(md);
+    return this.restoreMathFallbacks(this.engine.render(normalized.text, env), normalized.fallbacks);
   }
 
   public getStyles(panel: vscode.WebviewPanel | undefined): string {
@@ -118,6 +119,135 @@ class MarkdownService implements vscode.Disposable {
     return md;
   }
 
+  private normalizeMath(md: string): { text: string; fallbacks: string[] } {
+    const lines: string[] = String(md || "").split(/\n/);
+    const result: string[] = [];
+    const fallbacks: string[] = [];
+    let textBuffer: string[] = [];
+    let inFence: string | undefined;
+    const flushText = (): void => {
+      if (!textBuffer.length) {
+        return;
+      }
+      result.push(this.normalizeMathText(textBuffer.join("\n"), fallbacks));
+      textBuffer = [];
+    };
+    lines.forEach((line: string) => {
+      const fence = line.match(/^\s*(```|~~~)/);
+      if (fence) {
+        if (!inFence) {
+          flushText();
+          inFence = fence[1];
+          result.push(line);
+          return;
+        }
+        result.push(line);
+        if (fence[1] === inFence) {
+          inFence = undefined;
+        }
+        return;
+      }
+      if (inFence) {
+        result.push(line);
+      } else {
+        textBuffer.push(line);
+      }
+    });
+    flushText();
+    return { text: result.join("\n"), fallbacks };
+  }
+
+  private normalizeMathText(text: string, fallbacks: string[]): string {
+    return this.normalizeKatexCompatibility(String(text || ""))
+      .replace(/\\\[([\s\S]*?)\\\]/g, (_match: string, expr: string) => `\n\n$$${expr}$$\n\n`)
+      .replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, expr: string) => this.normalizeDisplayMath(expr, fallbacks))
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_match: string, expr: string) => `$${expr}$`);
+  }
+
+  private normalizeKatexCompatibility(text: string): string {
+    return String(text || "")
+      .replace(/\\begin\{alignedat\*?\}(?:\{\d+\})?/g, "\\begin{aligned}")
+      .replace(/\\end\{alignedat\*?\}/g, "\\end{aligned}")
+      .replace(/\\textrm\b/g, "\\text")
+      .replace(/\\textit\b/g, "\\text")
+      .replace(/\\texttt\b/g, "\\text")
+      .replace(/\\text\{``([^{}]*)''\}/g, (_match: string, value: string) => `\\text{"${value}"}`)
+      .replace(/\\xRightarrow(?:\[[^\]]*\])?(?:\{[^}]*\})?/g, "\\Longrightarrow")
+      .replace(/\\xrightarrow(?:\[[^\]]*\])?(?:\{[^}]*\})?/g, "\\longrightarrow");
+  }
+
+  private normalizeDisplayMath(expr: string, fallbacks: string[]): string {
+    const normalized: string = this.normalizeKatexCompatibility(expr);
+    const fallback: string | undefined = this.renderCasesFallback(normalized);
+    if (!fallback) {
+      return `\n\n$$${normalized}$$\n\n`;
+    }
+    const token: string = this.mathFallbackToken(fallbacks.length);
+    fallbacks.push(fallback);
+    return `\n\n${token}\n\n`;
+  }
+
+  private renderCasesFallback(expr: string): string | undefined {
+    if (!/[^\x00-\x7F]/.test(expr) || !/\\begin\{cases\}/.test(expr)) {
+      return undefined;
+    }
+    const match: RegExpMatchArray | null = expr.match(/^([\s\S]*?)\\begin\{cases\}([\s\S]*?)\\end\{cases\}([\s\S]*?)$/);
+    if (!match) {
+      return undefined;
+    }
+    const prefix: string = match[1].trim();
+    const body: string = match[2].trim();
+    const suffix: string = match[3].trim();
+    const rows = body
+      .split(/\\\\/)
+      .map((row: string) => row.trim())
+      .filter((row: string) => row.length > 0)
+      .map((row: string) => {
+        const parts: string[] = row.split(/&+/);
+        const value: string = (parts.shift() || "").trim();
+        const condition: string = parts.join(" ").trim();
+        return `<div class="lcpr-math-case-row"><div class="lcpr-math-case-value">${this.escapeHtml(this.plainMathText(value))}</div><div class="lcpr-math-case-condition">${this.escapeHtml(this.plainMathText(condition))}</div></div>`;
+      });
+    if (!rows.length) {
+      return undefined;
+    }
+    return [
+      `<div class="lcpr-math-fallback">`,
+      prefix ? `<div class="lcpr-math-prefix">${this.escapeHtml(this.plainMathText(prefix))}</div>` : "",
+      `<div class="lcpr-math-brace">{</div>`,
+      `<div class="lcpr-math-cases">${rows.join("")}</div>`,
+      suffix ? `<div class="lcpr-math-suffix">${this.escapeHtml(this.plainMathText(suffix))}</div>` : "",
+      `</div>`,
+    ].join("");
+  }
+
+  private plainMathText(expr: string): string {
+    return String(expr || "")
+      .replace(/\\quad/g, " ")
+      .replace(/\\qquad/g, " ")
+      .replace(/\\dots/g, "...")
+      .replace(/\\ldots/g, "...")
+      .replace(/\\text\{([^{}]*)\}/g, "$1")
+      .replace(/\\mathrm\{([^{}]*)\}/g, "$1")
+      .replace(/~/g, " ")
+      .replace(/[{}]/g, "")
+      .replace(/\\([A-Za-z]+)/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private restoreMathFallbacks(html: string, fallbacks: string[]): string {
+    return fallbacks.reduce((result: string, fallback: string, index: number) => {
+      const token: string = this.mathFallbackToken(index);
+      const wrapped: RegExp = new RegExp(`<p>\\s*${token}\\s*</p>`, "g");
+      return result.replace(wrapped, fallback).replace(new RegExp(token, "g"), fallback);
+    }, html);
+  }
+
+  private mathFallbackToken(index: number): string {
+    return `LCPR_MATH_FALLBACK_${index}`;
+  }
+
   private addCodeBlockHighlight(md: MarkdownIt): void {
     const codeBlock: MarkdownIt.TokenRender = md.renderer.rules["code_block"];
     // tslint:disable-next-line:typedef
@@ -140,12 +270,61 @@ class MarkdownService implements vscode.Disposable {
     const image: MarkdownIt.TokenRender = md.renderer.rules["image"];
     // tslint:disable-next-line:typedef
     md.renderer.rules["image"] = (tokens, idx, options, env, self) => {
-      const imageSrc: string[] | undefined = tokens[idx].attrs.find((value: string[]) => value[0] === "src");
+      const token: any = tokens[idx];
+      const imageSrc: string[] | undefined = token.attrs.find((value: string[]) => value[0] === "src");
+      const rawSrc: string = imageSrc ? String(imageSrc[1] || "") : "";
+      const alt: string = String(token.content || "");
+      if (this.isVideoImage(rawSrc, alt)) {
+        return this.renderVideoImage(rawSrc, alt, env);
+      }
       if (env.host && imageSrc && imageSrc[1].startsWith("/")) {
         imageSrc[1] = `${env.host}${imageSrc[1]}`;
       }
       return image(tokens, idx, options, env, self);
     };
+  }
+
+  private isVideoImage(src: string, alt: string): boolean {
+    const text: string = `${src || ""} ${alt || ""}`;
+    if (/\.(?:mp4|webm|mov|m4v)(?:[?#]|\s|$)/i.test(text)) {
+      return true;
+    }
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(src)
+      && /视频|video/i.test(alt);
+  }
+
+  private renderVideoImage(src: string, alt: string, env: any): string {
+    const title: string = alt || "视频题解";
+    if (/^https?:\/\//i.test(src) && /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(src)) {
+      const escapedSrc: string = this.escapeHtmlAttr(src);
+      const escapedTitle: string = this.escapeHtml(title);
+      return `<figure class="lcpr-video-card"><video controls preload="metadata" src="${escapedSrc}" aria-label="${escapedTitle}"></video></figure>`;
+    }
+    const articleUrl: string = String((env && (env.articleUrl || env.url)) || "");
+    const action: string = articleUrl
+      ? `<a class="lcpr-video-action" href="${this.escapeHtmlAttr(articleUrl)}">打开视频</a>`
+      : "";
+    return [
+      `<figure class="lcpr-video-card" data-lcpr-video-id="${this.escapeHtmlAttr(src)}">`,
+      `<div class="lcpr-video-body">`,
+      `<div class="lcpr-video-kind">视频题解</div>`,
+      `<div class="lcpr-video-title">${this.escapeHtml(title)}</div>`,
+      `</div>`,
+      action,
+      `</figure>`,
+    ].join("");
+  }
+
+  private escapeHtml(value: string): string {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  private escapeHtmlAttr(value: string): string {
+    return this.escapeHtml(value).replace(/'/g, "&#39;");
   }
 
   private addLinkValidator(md: MarkdownIt): void {

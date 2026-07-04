@@ -57,7 +57,16 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
-                    const json = JSON.parse(body);
+                    let json;
+                    try {
+                        json = typeof body === "string" ? JSON.parse(body) : body;
+                    }
+                    catch (_) {
+                        return cb("LeetCode returned an invalid problem list response.");
+                    }
+                    if (!json || !Array.isArray(json.stat_status_pairs)) {
+                        return cb("LeetCode returned an invalid problem list response.");
+                    }
                     if (json.user_name.length === 0) {
                         return cb(sessionUtils_1.sessionUtils.errors.EXPIRED);
                     }
@@ -144,7 +153,7 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
-                    const q = body.data.question;
+                    const q = body && body.data && body.data.question;
                     if (!q)
                         return cb("failed to load problem!");
                     problem.totalAC = JSON.parse(q.stats).totalAccepted;
@@ -168,7 +177,7 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
-                    const q = body.data.question;
+                    const q = body && body.data && body.data.question;
                     if (!q)
                         return cb('failed to load problem!');
                     problem.totalAC = JSON.parse(q.stats).totalAccepted;
@@ -1339,6 +1348,12 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                 solution_result.is_cn = false;
                 ReplyUtils_1.reply.info(JSON.stringify({ code: 100, solution: solution_result }));
             });
+        };
+        this.getSolutionArticles = (_problem, _options, cb) => {
+            cb("中文站题解仅在 leetcode.cn endpoint 可用");
+        };
+        this.getSolutionArticle = (_problem, _slug, cb) => {
+            cb("中文站题解仅在 leetcode.cn endpoint 可用");
         };
     }
     init() {

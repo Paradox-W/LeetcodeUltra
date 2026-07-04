@@ -76,6 +76,12 @@ export class ChainNodeBase {
   public getSubmission(s, cb: Function): void {
     this.next.getSubmission(s, cb);
   }
+  public getSolutionArticles(problem, options, cb: Function): void {
+    this.next.getSolutionArticles(problem, options, cb);
+  }
+  public getSolutionArticle(problem, slug, cb: Function): void {
+    this.next.getSolutionArticle(problem, slug, cb);
+  }
   public submitProblem(s, cb: Function): void {
     this.next.submitProblem(s, cb);
   }

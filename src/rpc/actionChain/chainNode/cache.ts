@@ -24,11 +24,22 @@ class CachePlugin extends ChainNodeBase {
     super();
   }
 
+  translationCacheSuffix = (needTranslation) => (needTranslation ? "translated" : "raw");
+
+  translatedCacheKey = (key, needTranslation) => `${key}.${this.translationCacheSuffix(needTranslation)}`;
+
+  problemCacheKey = (problem, needTranslation) =>
+    this.translatedCacheKey(commUtils.KEYS.problem(problem), needTranslation);
+
+  canUseLegacyTranslationCache = (needTranslation) => {
+    const translationConfig = storageUtils.getCache(commUtils.KEYS.translation);
+    return !translationConfig || translationConfig["useEndpointTranslation"] == needTranslation;
+  };
+
   /* Checking if the translation config has changed. If it has, it clears the cache. */
   clearCacheIfTchanged = (needTranslation) => {
     const translationConfig = storageUtils.getCache(commUtils.KEYS.translation);
     if (!translationConfig || translationConfig["useEndpointTranslation"] != needTranslation) {
-      storageUtils.deleteAllCache();
       storageUtils.setCache(commUtils.KEYS.translation, {
         useEndpointTranslation: needTranslation,
       });
@@ -38,14 +49,22 @@ class CachePlugin extends ChainNodeBase {
   /* A method that is used to get problems from the cache. If the cache is empty, it will get the
 problems from the next layer. */
   public getProblems = (needTranslation, cb) => {
+    const canUseLegacyCache = this.canUseLegacyTranslationCache(needTranslation);
     this.clearCacheIfTchanged(needTranslation);
-    const problems = storageUtils.getCache(commUtils.KEYS.problems);
+    const key = this.translatedCacheKey(commUtils.KEYS.problems, needTranslation);
+    let problems = storageUtils.getCache(key);
+    if (!problems && canUseLegacyCache) {
+      problems = storageUtils.getCache(commUtils.KEYS.problems);
+      if (problems) {
+        storageUtils.setCache(key, problems);
+      }
+    }
     if (problems) {
       return cb(null, problems);
     }
     this.next.getProblems(needTranslation, function (e, problems) {
       if (e) return cb(e);
-      storageUtils.setCache(commUtils.KEYS.problems, problems);
+      storageUtils.setCache(key, problems);
       return cb(null, problems);
     });
   };
@@ -73,9 +92,16 @@ problems from the next layer. */
 
   /* A cache layer for the getProblem function. */
   public getProblem = (problem, needTranslation, cb) => {
+    const canUseLegacyCache = this.canUseLegacyTranslationCache(needTranslation);
     this.clearCacheIfTchanged(needTranslation);
-    const k = commUtils.KEYS.problem(problem);
-    const _problem = storageUtils.getCache(k);
+    const k = this.problemCacheKey(problem, needTranslation);
+    let _problem = storageUtils.getCache(k);
+    if (!_problem && canUseLegacyCache) {
+      _problem = storageUtils.getCache(commUtils.KEYS.problem(problem));
+      if (_problem) {
+        storageUtils.setCache(k, _problem);
+      }
+    }
     let that = this;
     if (_problem) {
       if (!_problem.desc.includes("<pre>")) {
@@ -90,26 +116,36 @@ problems from the next layer. */
     this.next.getProblem(problem, needTranslation, function (e, _problem) {
       if (e) return cb(e);
 
-      that.saveProblem(_problem);
+      that.saveProblem(_problem, needTranslation);
       return cb(null, _problem);
     });
   };
 
-  saveProblem = (problem) => {
+  saveProblem = (problem, needTranslation) => {
     const _problem = underscore.omit(problem, ["locked", "state", "starred"]);
-    return storageUtils.setCache(commUtils.KEYS.problem(problem), _problem);
+    return storageUtils.setCache(this.problemCacheKey(problem, needTranslation), _problem);
   };
 
   /* Updating the problem in the cache. */
   updateProblem = (problem, kv) => {
-    const problems = storageUtils.getCache(commUtils.KEYS.problems);
-    if (!problems) return false;
+    const keys = [
+      commUtils.KEYS.problems,
+      this.translatedCacheKey(commUtils.KEYS.problems, true),
+      this.translatedCacheKey(commUtils.KEYS.problems, false),
+    ];
+    let updated = false;
+    keys.forEach((key) => {
+      const problems = storageUtils.getCache(key);
+      if (!problems) return;
 
-    const _problem = problems.find((x) => x.id === problem.id);
-    if (!_problem) return false;
+      const _problem = problems.find((x) => x.id === problem.id);
+      if (!_problem) return;
 
-    underscore.extend(_problem, kv);
-    return storageUtils.setCache(commUtils.KEYS.problems, problems);
+      underscore.extend(_problem, kv);
+      storageUtils.setCache(key, problems);
+      updated = true;
+    });
+    return updated;
   };
 
   /* Logging out the user and then logging in the user. */

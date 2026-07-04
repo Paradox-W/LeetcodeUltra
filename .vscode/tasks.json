@@ -3,13 +3,28 @@
     "tasks": [
         {
             "label": "npm",
+            "dependsOrder": "sequence",
             "dependsOn": [
+                "prepare_debug_profile",
                 "npm_rm",
                 "npm_do"
             ]
         },
         {
+            "label": "prepare_debug_profile",
+            "type": "shell",
+            "command": "node",
+            "args": [
+                "scripts/prepare-debug-profile.js"
+            ],
+            "presentation": {
+                "reveal": "silent"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "window_npm",
+            "dependsOrder": "sequence",
             "dependsOn": [
                 "window_npm_rm",
                 "window_npm_do"
@@ -39,11 +54,10 @@
                 "--loglevel",
                 "silent"
             ],
-            "isBackground": true,
             "presentation": {
                 "reveal": "silent"
             },
-            "problemMatcher": "$tsc-watch"
+            "problemMatcher": "$tsc"
         },
         {
             "label": "npm_rm",
@@ -76,11 +90,10 @@
                 "--loglevel",
                 "silent"
             ],
-            "isBackground": true,
             "presentation": {
                 "reveal": "silent"
             },
-            "problemMatcher": "$tsc-watch"
+            "problemMatcher": "$tsc"
         },
         {
             "type": "npm",

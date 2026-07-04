@@ -185,6 +185,7 @@ export async function sysCall(
 ): Promise<string> {
   return new Promise((resolve: (res: string) => void, reject: (e: Error) => void): void => {
     let result: string = "";
+    let stderrResult: string = "";
     let childProc: cp.ChildProcess;
     if (useVscodeNode() && command == "node") {
       let newargs: string[] = [];
@@ -207,13 +208,15 @@ export async function sysCall(
       BABA.getProxy(BabaStr.LogOutputProxy).get_log().append(data);
     });
 
-    childProc.stderr?.on("data", (data: string | Buffer) =>
-      BABA.getProxy(BabaStr.LogOutputProxy).get_log().append(data.toString())
-    );
+    childProc.stderr?.on("data", (data: string | Buffer) => {
+      data = data.toString();
+      stderrResult = stderrResult.concat(data);
+      BABA.getProxy(BabaStr.LogOutputProxy).get_log().append(data);
+    });
 
     childProc.on("error", reject);
 
-    childProc.on("close", (code: number) => {
+    childProc.on("close", (code: number, signal: NodeJS.Signals | null) => {
       let try_result_json;
       try {
         try_result_json = JSON.parse(result);
@@ -221,7 +224,9 @@ export async function sysCall(
         try_result_json;
       }
       if (code !== 0 || (try_result_json ? try_result_json.code < 0 : result.indexOf("ERROR") > -1)) {
-        const error = new Error(`exit code "${code}". ${result || ""}`);
+        const signalMessage = signal ? ` signal "${signal}".` : "";
+        const stderrMessage = stderrResult ? ` ${stderrResult}` : "";
+        const error = new Error(`exit code "${code}".${signalMessage} ${result || ""}${stderrMessage}`);
         reject(error);
       } else {
         resolve(result);

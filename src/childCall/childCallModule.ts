@@ -313,6 +313,27 @@ class ExecuteService {
             return yield this.callWithMsg("正在获取提交详情~", this.nodeExecutable, cmd);
         });
     }
+    getSolutionArticles(problemNodeId, options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const cmd = [yield this.getLeetCodeBinaryPath(), "solutions", problemNodeId];
+            if (options.skip !== undefined) {
+                cmd.push("-s", String(options.skip));
+            }
+            if (options.first !== undefined) {
+                cmd.push("-n", String(options.first));
+            }
+            if (options.lang) {
+                cmd.push("-l", String(options.lang));
+            }
+            return yield this.callWithMsg("正在获取题解列表~", this.nodeExecutable, cmd);
+        });
+    }
+    getSolutionArticleDetail(problemNodeId, articleSlug) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const cmd = [yield this.getLeetCodeBinaryPath(), "solutions", problemNodeId, "-d", articleSlug];
+            return yield this.callWithMsg("正在获取题解详情~", this.nodeExecutable, cmd);
+        });
+    }
     getUserActivityCalendar(username, days, year) {
         return __awaiter(this, void 0, void 0, function* () {
             const cmd = [yield this.getLeetCodeBinaryPath(), "activity"];

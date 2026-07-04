@@ -1408,11 +1408,16 @@ class LeetCodeWorkbenchProvider {
       line-height: 1.45;
     }
     .list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+      align-items: start;
+      gap: 10px;
       padding: 8px 18px 10px;
     }
     .case {
       position: relative;
-      margin-bottom: 6px;
+      min-width: 0;
+      margin: 0;
       padding: 0 7px 5px 18px;
       border: 0;
       border-radius: 4px;
@@ -1499,8 +1504,9 @@ class LeetCodeWorkbenchProvider {
     }
     .case-add-row {
       display: flex;
+      grid-column: 1 / -1;
       justify-content: center;
-      padding: 8px 0 4px;
+      padding: 4px 0;
     }
     .case-add-button {
       display: inline-grid;
@@ -1616,6 +1622,12 @@ class LeetCodeWorkbenchProvider {
       .case-pane {
         overflow: visible;
         border-left: 0;
+      }
+      .list {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+        gap: 8px;
+        padding-right: var(--panel-pad-x);
+        padding-left: var(--panel-pad-x);
       }
       .result-sticky {
         min-height: 0;

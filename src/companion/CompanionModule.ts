@@ -13,9 +13,13 @@ class LeetCodeCompanionProvider {
     constructor(context) {
         this.context = context;
         this.view = undefined;
+        this.descriptionRequestSeq = 0;
         this.state = {
             activeTab: "empty",
             description: undefined,
+            descriptionZh: undefined,
+            descriptionEn: undefined,
+            descriptionMode: ConfigUtils_1.isUseEndpointTranslation() ? "zh" : "en",
             descriptionStatus: undefined,
             node: undefined,
             solution: undefined,
@@ -263,19 +267,32 @@ body .submission-code code.hljs .hljs-strong {
         webviewView.webview.onDidReceiveMessage((message) => this.handleMessage(message));
     }
     showDescription(description, node) {
-        this.state.description = description;
+        const incomingMode = ConfigUtils_1.isUseEndpointTranslation() ? "zh" : "en";
+        const wantedMode = this.normalizeDescriptionMode(this.state.descriptionMode || incomingMode);
+        this.state.descriptionMode = wantedMode;
+        this.state.descriptionZh = incomingMode === "zh" ? description : undefined;
+        this.state.descriptionEn = incomingMode === "en" ? description : undefined;
+        this.state.description = incomingMode === "zh" ? this.state.descriptionZh : this.state.descriptionEn;
         this.state.descriptionStatus = undefined;
         this.state.node = node;
         this.state.activeTab = "description";
         this.revealAndRender(true);
+        if ((wantedMode === "zh" && incomingMode !== "zh")
+            || (wantedMode === "en" && incomingMode !== "en")
+            || wantedMode === "both") {
+            this.switchDescriptionMode(wantedMode);
+        }
     }
     showDescriptionLoading(node, attempt = 1) {
+        this.descriptionRequestSeq += 1;
         this.state.node = node;
         this.state.description = {
             title: node && node.name ? node.name : "力扣助手",
             url: "",
             body: "",
         };
+        this.state.descriptionZh = undefined;
+        this.state.descriptionEn = undefined;
         this.state.descriptionStatus = {
             loading: true,
             error: "",
@@ -286,12 +303,15 @@ body .submission-code code.hljs .hljs-strong {
         this.revealAndRender(true);
     }
     showDescriptionError(node, error, attempt = 1, willRetry = false) {
+        this.descriptionRequestSeq += 1;
         this.state.node = node || this.state.node;
         this.state.description = {
             title: node && node.name ? node.name : "力扣助手",
             url: "",
             body: "",
         };
+        this.state.descriptionZh = undefined;
+        this.state.descriptionEn = undefined;
         this.state.descriptionStatus = {
             loading: false,
             error: String(error || "题面加载失败。"),
@@ -349,6 +369,108 @@ body .submission-code code.hljs .hljs-strong {
             }
         }
         return {};
+    }
+    normalizeDescriptionMode(mode) {
+        return ["zh", "en", "both"].includes(mode) ? mode : "zh";
+    }
+    activeDescriptionForMode(mode = this.state.descriptionMode) {
+        const normalized = this.normalizeDescriptionMode(mode);
+        if (normalized === "en") {
+            return this.state.descriptionEn || this.state.description;
+        }
+        return this.state.descriptionZh || this.state.description;
+    }
+    descriptionTitleForMode(mode) {
+        const node = this.state.node || {};
+        if (mode === "en") {
+            return node.en_name || node.enName || (this.state.descriptionEn && this.state.descriptionEn.title) || node.name || "力扣助手";
+        }
+        return node.cn_name || node.cnName || (this.state.descriptionZh && this.state.descriptionZh.title) || node.name || "力扣助手";
+    }
+    buildDescriptionFromPayload(payload, mode) {
+        const msg = payload && payload.msg ? payload.msg : {};
+        const rawDesc = String(msg.desc || "");
+        return {
+            title: msg.title || this.descriptionTitleForMode(mode),
+            url: msg.url || "",
+            tags: (this.state.node && this.state.node.tags) || [],
+            companies: (this.state.node && this.state.node.companies) || [],
+            category: msg.category || "",
+            difficulty: msg.difficulty || "",
+            likes: msg.likes || "",
+            dislikes: msg.dislikes || "",
+            body: rawDesc.replace(/<pre>[\r\n]*([^]+?)[\r\n]*<\/pre>/g, "<pre><code>$1</code></pre>"),
+            contest_slug: (this.state.node && this.state.node.scoreData && this.state.node.scoreData.ContestSlug) || "-",
+            problem_index: (this.state.node && this.state.node.scoreData && this.state.node.scoreData.ProblemIndex) || "-",
+            problem_score: (this.state.node && this.state.node.scoreData && this.state.node.scoreData.score) || "0",
+        };
+    }
+    async fetchDescriptionMode(mode, seq) {
+        const normalized = this.normalizeDescriptionMode(mode);
+        const raw = await this.getChildCall().getDescription(this.getProblemInput(), normalized === "zh");
+        if (seq !== this.descriptionRequestSeq) {
+            return;
+        }
+        const payload = this.parseJsonResponse(raw);
+        if (payload.code !== 100 || !payload.msg) {
+            throw new Error(String(payload.error || payload.msg || raw || "题面读取失败"));
+        }
+        const description = this.buildDescriptionFromPayload(payload, normalized);
+        if (normalized === "zh") {
+            this.state.descriptionZh = description;
+        }
+        else {
+            this.state.descriptionEn = description;
+        }
+    }
+    async switchDescriptionMode(mode) {
+        const normalized = this.normalizeDescriptionMode(mode);
+        if (!this.state.node) {
+            return;
+        }
+        this.state.descriptionMode = normalized;
+        this.state.activeTab = "description";
+        this.state.descriptionStatus = undefined;
+        const needsZh = (normalized === "zh" || normalized === "both") && !this.state.descriptionZh;
+        const needsEn = (normalized === "en" || normalized === "both") && !this.state.descriptionEn;
+        if (!needsZh && !needsEn) {
+            this.state.description = this.activeDescriptionForMode(normalized);
+            this.revealAndRender(true);
+            return;
+        }
+        const seq = ++this.descriptionRequestSeq;
+        this.state.description = this.activeDescriptionForMode(normalized);
+        const target = normalized === "both" ? "双语题面" : normalized === "en" ? "英文题面" : "中文题面";
+        this.state.descriptionStatus = {
+            loading: true,
+            error: "",
+            detail: `正在加载${target}。`,
+        };
+        this.revealAndRender(true);
+        try {
+            if (needsZh) {
+                await this.fetchDescriptionMode("zh", seq);
+            }
+            if (needsEn) {
+                await this.fetchDescriptionMode("en", seq);
+            }
+            if (seq !== this.descriptionRequestSeq) {
+                return;
+            }
+            this.state.description = this.activeDescriptionForMode(normalized);
+            this.state.descriptionStatus = undefined;
+        }
+        catch (error) {
+            if (seq !== this.descriptionRequestSeq) {
+                return;
+            }
+            this.state.descriptionStatus = {
+                loading: false,
+                error: error && error.message ? error.message : String(error || "题面读取失败"),
+                willRetry: false,
+            };
+        }
+        this.revealAndRender(true);
     }
     async loadSubmissions() {
         const problemInput = this.getProblemInput();
@@ -547,6 +669,9 @@ body .submission-code code.hljs .hljs-strong {
                 this.state.activeTab = this.state.description ? "description" : "empty";
                 this.revealAndRender(true);
                 break;
+            case "switchDescriptionLanguage":
+                this.switchDescriptionMode(message.mode);
+                break;
             case "saveSubmissionNote":
                 this.saveSubmissionNote(message.id, message.text);
                 break;
@@ -639,6 +764,199 @@ body .submission-code code.hljs .hljs-strong {
       vscode.setState(state);
     }
     applyReadingFontSize();
+    function isDarkImageTheme() {
+      return document.body.classList.contains('vscode-dark') ||
+        (document.body.classList.contains('vscode-high-contrast') && !document.body.classList.contains('vscode-high-contrast-light'));
+    }
+    function pixelLuminance(r, g, b) {
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+    function channelDistance(r, g, b, target) {
+      return Math.max(Math.abs(r - target.r), Math.abs(g - target.g), Math.abs(b - target.b));
+    }
+    function findEdgeBackground(imageData, width, height) {
+      const data = imageData.data;
+      const step = Math.max(1, Math.floor(Math.max(width, height) / 160));
+      const stats = {
+        light: { count: 0, r: 0, g: 0, b: 0 },
+        dark: { count: 0, r: 0, g: 0, b: 0 },
+      };
+      let samples = 0;
+      function sample(x, y) {
+        const index = (y * width + x) * 4;
+        const a = data[index + 3];
+        if (a < 32) return;
+        samples += 1;
+        const r = data[index];
+        const g = data[index + 1];
+        const b = data[index + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const chroma = max - min;
+        const lum = pixelLuminance(r, g, b);
+        const bucket = lum > 218 && chroma < 46 ? stats.light : lum < 42 && chroma < 46 ? stats.dark : null;
+        if (!bucket) return;
+        bucket.count += 1;
+        bucket.r += r;
+        bucket.g += g;
+        bucket.b += b;
+      }
+      for (let x = 0; x < width; x += step) {
+        sample(x, 0);
+        sample(x, height - 1);
+      }
+      for (let y = 0; y < height; y += step) {
+        sample(0, y);
+        sample(width - 1, y);
+      }
+      if (samples < 8) return null;
+      const lightWins = stats.light.count >= stats.dark.count;
+      const winner = lightWins ? stats.light : stats.dark;
+      if (winner.count < Math.max(8, samples * 0.34)) return null;
+      const kind = lightWins ? 'light' : 'dark';
+      return {
+        kind,
+        r: winner.r / winner.count,
+        g: winner.g / winner.count,
+        b: winner.b / winner.count,
+        luminance: pixelLuminance(winner.r / winner.count, winner.g / winner.count, winner.b / winner.count),
+      };
+    }
+    function isNearEdgeBackground(data, index, target) {
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const a = data[index + 3];
+      if (a < 16) return true;
+      const distance = channelDistance(r, g, b, target);
+      const lumDelta = Math.abs(pixelLuminance(r, g, b) - target.luminance);
+      return distance <= 58 && lumDelta <= 58;
+    }
+    function removeEdgeConnectedBackground(imageData, width, height, target) {
+      const data = imageData.data;
+      const total = width * height;
+      const seen = new Uint8Array(total);
+      const stack = [];
+      let changed = 0;
+      function push(pixel) {
+        if (pixel < 0 || pixel >= total || seen[pixel]) return;
+        const index = pixel * 4;
+        if (!isNearEdgeBackground(data, index, target)) return;
+        seen[pixel] = 1;
+        stack.push(pixel);
+      }
+      for (let x = 0; x < width; x += 1) {
+        push(x);
+        push((height - 1) * width + x);
+      }
+      for (let y = 0; y < height; y += 1) {
+        push(y * width);
+        push(y * width + width - 1);
+      }
+      while (stack.length) {
+        const pixel = stack.pop();
+        const index = pixel * 4;
+        const originalAlpha = data[index + 3];
+        const distance = channelDistance(data[index], data[index + 1], data[index + 2], target);
+        const alphaRatio = Math.max(0, Math.min(1, (distance - 12) / 42));
+        const nextAlpha = Math.round(originalAlpha * alphaRatio);
+        if (nextAlpha !== originalAlpha) {
+          data[index + 3] = nextAlpha;
+          changed += 1;
+        }
+        const x = pixel % width;
+        if (x > 0) push(pixel - 1);
+        if (x + 1 < width) push(pixel + 1);
+        if (pixel >= width) push(pixel - width);
+        if (pixel + width < total) push(pixel + width);
+      }
+      return changed;
+    }
+    function invertOpaquePixels(imageData) {
+      const data = imageData.data;
+      for (let index = 0; index < data.length; index += 4) {
+        if (data[index + 3] < 4) continue;
+        data[index] = 255 - data[index];
+        data[index + 1] = 255 - data[index + 1];
+        data[index + 2] = 255 - data[index + 2];
+      }
+    }
+    function processBackgroundAwareImage(img, sourceImage, source) {
+      const width = sourceImage.naturalWidth || sourceImage.width;
+      const height = sourceImage.naturalHeight || sourceImage.height;
+      if (!width || !height || width * height > 4000000) {
+        img.dataset.lcprBgProcessed = 'skipped';
+        return;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) {
+        img.dataset.lcprBgProcessed = 'skipped';
+        return;
+      }
+      try {
+        context.drawImage(sourceImage, 0, 0, width, height);
+        const imageData = context.getImageData(0, 0, width, height);
+        const target = findEdgeBackground(imageData, width, height);
+        if (!target) {
+          img.dataset.lcprBgProcessed = 'skipped';
+          return;
+        }
+        const changed = removeEdgeConnectedBackground(imageData, width, height, target);
+        if (changed < Math.max(16, width * height * 0.01)) {
+          img.dataset.lcprBgProcessed = 'skipped';
+          return;
+        }
+        const sourceIsDark = target.kind === 'dark';
+        if (sourceIsDark !== isDarkImageTheme()) {
+          invertOpaquePixels(imageData);
+        }
+        context.putImageData(imageData, 0, 0);
+        img.dataset.lcprOriginalSrc = source;
+        img.src = canvas.toDataURL('image/png');
+        img.classList.add('lcpr-image-bg-transparent');
+        img.dataset.lcprBgProcessed = 'done';
+      } catch (_) {
+        img.dataset.lcprBgProcessed = 'skipped';
+      }
+    }
+    function prepareBackgroundAwareImage(img) {
+      if (!img || img.dataset.lcprBgProcessed === 'pending' || img.dataset.lcprBgProcessed === 'done') return;
+      const source = img.dataset.lcprOriginalSrc || img.currentSrc || img.getAttribute('src') || '';
+      if (!source || source.startsWith('file:')) {
+        img.dataset.lcprBgProcessed = 'skipped';
+        return;
+      }
+      img.dataset.lcprBgProcessed = 'pending';
+      const sourceImage = new Image();
+      sourceImage.crossOrigin = 'anonymous';
+      sourceImage.decoding = 'async';
+      sourceImage.onload = () => processBackgroundAwareImage(img, sourceImage, source);
+      sourceImage.onerror = () => {
+        img.dataset.lcprBgProcessed = 'skipped';
+      };
+      sourceImage.src = source;
+    }
+    function applyBackgroundAwareImages() {
+      document.querySelectorAll('img[data-lcpr-problem-image="true"]').forEach(prepareBackgroundAwareImage);
+    }
+    function resetBackgroundAwareImages() {
+      document.querySelectorAll('img[data-lcpr-problem-image="true"]').forEach((img) => {
+        const original = img.dataset.lcprOriginalSrc;
+        if (original) img.src = original;
+        img.classList.remove('lcpr-image-bg-transparent');
+        delete img.dataset.lcprBgProcessed;
+      });
+      window.setTimeout(applyBackgroundAwareImages, 0);
+    }
+    applyBackgroundAwareImages();
+    new MutationObserver((records) => {
+      if (records.some((record) => record.attributeName === 'class')) {
+        resetBackgroundAwareImages();
+      }
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     const noteSearch = document.querySelector('[data-submission-note-search]');
     function normalizeClientSearch(value) {
       return String(value || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
@@ -725,6 +1043,8 @@ body .submission-code code.hljs .hljs-strong {
       const command = target.getAttribute('data-command');
       if (command === 'selectSubmission') {
         vscode.postMessage({ command, id: target.getAttribute('data-id') });
+      } else if (command === 'switchDescriptionLanguage') {
+        vscode.postMessage({ command, mode: target.getAttribute('data-mode') });
       } else if (command === 'saveSubmissionNote') {
         const textarea = document.querySelector('[data-submission-note]');
         vscode.postMessage({ command, id: target.getAttribute('data-id'), text: textarea ? textarea.value : '' });
@@ -809,7 +1129,7 @@ body .submission-code code.hljs .hljs-strong {
         return "empty";
     }
     renderHeader() {
-        const d = this.state.description;
+        const d = this.activeDescriptionForMode();
         const s = this.state.solution;
         const activeTab = this.resolveActiveTab();
         if (activeTab === "submissions") {
@@ -822,7 +1142,25 @@ body .submission-code code.hljs .hljs-strong {
     <h1>${url ? `<a href="${this.escapeAttr(url)}">${this.escapeHtml(title)}</a>` : this.escapeHtml(title)}</h1>
     ${this.shouldShowCodeNow(activeTab) ? `<button class="lcpr-icon-button" data-command="showProblem" title="开始写代码" aria-label="开始写代码">&lt;/&gt;</button>` : ""}
   </div>
+  ${activeTab === "description" ? this.renderDescriptionToolbar() : ""}
 </header>`;
+    }
+    renderDescriptionToolbar() {
+        return `<div class="lcpr-header-tools">${this.renderDescriptionModeControls()}${this.renderFontControls()}</div>`;
+    }
+    renderDescriptionModeControls() {
+        if (!this.state.node) {
+            return "";
+        }
+        const current = this.normalizeDescriptionMode(this.state.descriptionMode);
+        const modes = [
+            ["zh", "中文"],
+            ["en", "EN"],
+            ["both", "对照"],
+        ];
+        return `<span class="lcpr-lang-segment" role="group" aria-label="题面语言">
+  ${modes.map(([mode, label]) => `<button type="button" data-command="switchDescriptionLanguage" data-mode="${mode}" class="${current === mode ? "current" : ""}" aria-pressed="${current === mode ? "true" : "false"}">${label}</button>`).join("")}
+</span>`;
     }
     shouldShowCodeNow(activeTab) {
         return !!(this.state.node && activeTab !== "submissions" && !ConfigUtils_1.autoCreateFileOnPreview());
@@ -834,12 +1172,16 @@ body .submission-code code.hljs .hljs-strong {
 </span>`;
     }
     renderDescription() {
-        const d = this.state.description;
+        const mode = this.normalizeDescriptionMode(this.state.descriptionMode);
+        const d = this.activeDescriptionForMode(mode);
         if (this.state.descriptionStatus) {
             return this.renderDescriptionStatus();
         }
         if (!d) {
             return this.renderEmpty("还没有题面。");
+        }
+        if (mode === "both") {
+            return this.renderBilingualDescription();
         }
         const links = [
             `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getSolutionLink(d.url))}">题解</a>`,
@@ -850,7 +1192,37 @@ body .submission-code code.hljs .hljs-strong {
   <div class="lcpr-body">${this.refineProblemBody(d.body || "")}</div>
   ${this.renderInlineHints()}
   <div class="lcpr-meta-footer">
-    <div class="lcpr-secondary-actions"><span class="lcpr-secondary-links">${links}</span>${this.renderFontControls()}</div>
+    <div class="lcpr-secondary-actions"><span class="lcpr-secondary-links">${links}</span></div>
+    ${this.renderTargets(d)}
+  </div>
+</article>`;
+    }
+    renderBilingualDescription() {
+        const zh = this.state.descriptionZh;
+        const en = this.state.descriptionEn;
+        const d = zh || en || this.state.description;
+        if (!zh || !en || !d) {
+            return this.renderEmpty("双语题面还没有加载完成。");
+        }
+        const links = [
+            `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getSolutionLink(d.url))}">题解</a>`,
+            `<a class="lcpr-secondary-link" href="${this.escapeAttr(this.getDiscussionLink(d.url))}">讨论</a>`,
+            `<button class="lcpr-secondary-link" data-command="showSubmissions">提交记录</button>`,
+        ].join("");
+        return `<article class="lcpr-pane lcpr-markdown">
+  <div class="lcpr-bilingual">
+    <section class="lcpr-bilingual-section">
+      <div class="lcpr-bilingual-label">中文</div>
+      <div class="lcpr-body">${this.refineProblemBody(zh.body || "")}</div>
+    </section>
+    <section class="lcpr-bilingual-section">
+      <div class="lcpr-bilingual-label">English</div>
+      <div class="lcpr-body">${this.refineProblemBody(en.body || "")}</div>
+    </section>
+  </div>
+  ${this.renderInlineHints()}
+  <div class="lcpr-meta-footer">
+    <div class="lcpr-secondary-actions"><span class="lcpr-secondary-links">${links}</span></div>
     ${this.renderTargets(d)}
   </div>
 </article>`;
@@ -859,7 +1231,7 @@ body .submission-code code.hljs .hljs-strong {
         const status = this.state.descriptionStatus || {};
         const title = status.loading ? "正在加载题面" : "题面加载失败";
         const detail = status.loading
-            ? `正在请求题面${status.attempt ? `（第 ${status.attempt} 次）` : ""}。`
+            ? (status.detail || `正在请求题面${status.attempt ? `（第 ${status.attempt} 次）` : ""}。`)
             : `${status.error || "题面加载失败。"}${status.willRetry ? " 正在重试。" : ""}`;
         return `<article class="lcpr-pane">
   <div class="lcpr-load-state ${status.loading ? "loading" : "error"}">
@@ -874,10 +1246,10 @@ body .submission-code code.hljs .hljs-strong {
             return this.renderEmpty("还没有题解。");
         }
         const auth = s.is_cn ? `https://leetcode.cn/u/${s.author}/` : `https://leetcode.com/${s.author}/`;
-        const body = MarkdownService_1.markdownService.render(s.body || "", {
+        const body = this.prepareProblemImages(MarkdownService_1.markdownService.render(s.body || "", {
             lang: s.lang,
             host: "https://discuss.leetcode.com/",
-        });
+        }));
         return `<article class="lcpr-pane lcpr-markdown">
   <div class="lcpr-section-meta">
     <span>${this.escapeHtml(s.lang || "-")}</span>
@@ -895,7 +1267,7 @@ body .submission-code code.hljs .hljs-strong {
         return `<article class="lcpr-pane lcpr-hints">
 ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" : ""}>
   <summary>提示 ${index + 1}</summary>
-  <div class="lcpr-markdown">${MarkdownService_1.markdownService.render(String(hint || ""))}</div>
+  <div class="lcpr-markdown">${this.prepareProblemImages(MarkdownService_1.markdownService.render(String(hint || "")))}</div>
 </details>`).join("")}
 </article>`;
     }
@@ -908,7 +1280,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   <div class="lcpr-inline-title">提示</div>
   ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" : ""}>
     <summary>提示 ${index + 1}</summary>
-    <div class="lcpr-markdown">${MarkdownService_1.markdownService.render(String(hint || ""))}</div>
+    <div class="lcpr-markdown">${this.prepareProblemImages(MarkdownService_1.markdownService.render(String(hint || "")))}</div>
   </details>`).join("")}
 </section>`;
     }
@@ -1135,7 +1507,25 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   <code class="lcpr-example-value">${block.value}</code>
 </div>`).join("")}</div>`;
         });
-        return this.replaceProblemDiagrams(refined);
+        return this.prepareProblemImages(this.replaceProblemDiagrams(refined));
+    }
+    prepareProblemImages(body) {
+        return String(body || "").replace(/<img\b([^>]*)>/gi, (match, attrs) => {
+            const src = this.extractHtmlAttr(attrs, "src");
+            if (!src || this.extractHtmlAttr(attrs, "data-lcpr-problem-image")) {
+                return match;
+            }
+            const selfClosing = /\/\s*$/.test(String(attrs || ""));
+            const cleanAttrs = String(attrs || "").replace(/\/\s*$/, "");
+            const additions = [` data-lcpr-problem-image="true"`];
+            if (!this.extractHtmlAttr(cleanAttrs, "decoding")) {
+                additions.push(` decoding="async"`);
+            }
+            if (!this.extractHtmlAttr(cleanAttrs, "loading")) {
+                additions.push(` loading="lazy"`);
+            }
+            return `<img${cleanAttrs}${additions.join("")}${selfClosing ? " /" : ""}>`;
+        });
     }
     replaceProblemDiagrams(body) {
         const pack = loadDiagramPack(this.state.node || {});
@@ -1704,6 +2094,22 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
   --lcpr-success: #2ea043;
   --lcpr-focus-gray: #b7b7b7;
 }
+body.vscode-dark {
+  --lcpr-success-deep: #2ea043;
+  --lcpr-success: #3fb950;
+  --lcpr-bg: var(--vscode-sideBar-background, #1f2028);
+  --lcpr-fg: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 94%, #ffffff 6%);
+  --lcpr-muted: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 76%, var(--vscode-sideBar-background, #1f2028) 24%);
+  --lcpr-border: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 20%, transparent);
+  --lcpr-input: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 84%, #ffffff 10%);
+  --lcpr-code-bg: color-mix(in srgb, var(--vscode-editor-background, #1f2028) 82%, #ffffff 12%);
+  --lcpr-hover: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 72%, #ffffff 15%);
+}
+body.vscode-high-contrast {
+  --lcpr-fg: var(--vscode-foreground, #ffffff);
+  --lcpr-muted: var(--vscode-foreground, #ffffff);
+  --lcpr-border: var(--vscode-contrastBorder, var(--vscode-sideBar-border));
+}
 html, body {
   min-height: 100%;
   margin: 0;
@@ -1750,6 +2156,10 @@ h1 {
   flex: 1;
   min-width: 0;
   margin: 0;
+  padding-bottom: 0 !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
   color: var(--lcpr-fg);
   font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 20px;
@@ -1789,37 +2199,85 @@ h1 a:hover, h1 a:focus, h1 a:active {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
 }
+.lcpr-header-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 7px;
+  min-height: 22px;
+}
+.lcpr-lang-segment {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 22px;
+}
+.lcpr-lang-segment button {
+  min-width: 0;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lcpr-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 22px;
+  cursor: pointer;
+}
+.lcpr-lang-segment button:hover {
+  color: var(--lcpr-fg);
+  background: transparent;
+}
+.lcpr-lang-segment button.current {
+  color: var(--lcpr-fg);
+  background: transparent;
+  box-shadow: none;
+}
+.lcpr-lang-segment button:focus,
+.lcpr-lang-segment button:focus-visible,
+.lcpr-lang-segment button:active {
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
 .lcpr-font-controls {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  margin-left: auto;
+  gap: 12px;
+  min-height: 22px;
 }
 .lcpr-font-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
+  min-height: 22px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--vscode-textLink-foreground);
+  color: var(--lcpr-muted);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  line-height: 24px;
+  line-height: 22px;
   letter-spacing: 0;
   cursor: pointer;
 }
 .lcpr-font-button:hover:not(:disabled) {
   background: transparent;
-  color: var(--vscode-textLink-activeForeground, var(--vscode-foreground));
+  color: var(--lcpr-fg);
 }
-.lcpr-font-button:focus {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
+.lcpr-font-button:focus,
+.lcpr-font-button:focus-visible,
+.lcpr-font-button:active {
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 .lcpr-font-button:disabled {
   color: var(--lcpr-muted);
@@ -1919,11 +2377,15 @@ h1 a:hover, h1 a:focus, h1 a:active {
   max-width: 100% !important;
   height: auto !important;
   object-fit: contain;
-  margin: 8px 0;
+  margin: 8px auto;
 }
 body.vscode-dark .lcpr-markdown img,
 body.vscode-high-contrast .lcpr-markdown img {
   filter: url("#lcpr-invert-luminance");
+}
+.lcpr-markdown img.lcpr-image-bg-transparent {
+  background: transparent;
+  filter: none !important;
 }
 .lcpr-diagram {
   --lcpr-diagram-edge: color-mix(in srgb, var(--lcpr-fg) 82%, transparent);
@@ -1951,6 +2413,27 @@ body.vscode-high-contrast .lcpr-markdown img {
   padding: 2px 0 2px 10px;
   border-left: 2px solid var(--lcpr-border);
   color: var(--lcpr-muted);
+}
+.lcpr-bilingual {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lcpr-bilingual-section {
+  min-width: 0;
+  padding-top: 2px;
+}
+.lcpr-bilingual-section + .lcpr-bilingual-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--lcpr-border);
+}
+.lcpr-bilingual-label {
+  margin-bottom: 8px;
+  color: var(--lcpr-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 .lcpr-meta-footer {
   margin-top: 16px;

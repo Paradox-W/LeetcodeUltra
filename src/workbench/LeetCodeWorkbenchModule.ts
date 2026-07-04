@@ -13,6 +13,10 @@ class LeetCodeWorkbenchProvider {
         this.currentResult = undefined;
         this.currentDocumentUri = undefined;
         this.savingCases = false;
+        this.currentActivity = undefined;
+        this.activityLoading = false;
+        this.activityFetchedAt = 0;
+        this.activityCacheMs = 10 * 60 * 1000;
         this.aiDebugEnabledKey = "lcpr.workbench.aiDebugEnabled";
         this.aiDebugEnabled = !!this.context.workspaceState.get(this.aiDebugEnabledKey, false);
     }
@@ -29,6 +33,56 @@ class LeetCodeWorkbenchProvider {
     refresh() {
         this.currentState = this.readState();
         this.postState();
+        this.ensureActivityLoaded();
+    }
+    async ensureActivityLoaded(force = false) {
+        if (!this.view) {
+            return;
+        }
+        const now = Date.now();
+        if (this.activityLoading) {
+            return;
+        }
+        const cacheMs = this.currentActivity && this.currentActivity.status === "error" ? 60 * 1000 : this.activityCacheMs;
+        if (!force && this.currentActivity && now - this.activityFetchedAt < cacheMs) {
+            return;
+        }
+        this.activityLoading = true;
+        this.activityFetchedAt = now;
+        this.currentActivity = Object.assign({}, this.currentActivity || {}, {
+            status: "loading",
+        });
+        this.currentState = this.readState();
+        this.postState();
+        try {
+            const raw = await this.baba
+                .getProxy(this.babaStr.ChildCallProxy)
+                .get_instance()
+                .getUserActivityCalendar("", 365);
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.code === 100) {
+                this.currentActivity = Object.assign({ status: "ready", fetchedAt: Date.now() }, parsed);
+            }
+            else {
+                this.currentActivity = {
+                    status: "error",
+                    error: (parsed && (parsed.error || parsed.msg)) || "打卡数据不可用",
+                    fetchedAt: Date.now(),
+                };
+            }
+        }
+        catch (error) {
+            this.currentActivity = {
+                status: "error",
+                error: (error === null || error === void 0 ? void 0 : error.message) || String(error || "打卡数据不可用"),
+                fetchedAt: Date.now(),
+            };
+        }
+        finally {
+            this.activityLoading = false;
+            this.currentState = this.readState();
+            this.postState();
+        }
     }
     async refreshOfficialCases() {
         const editor = this.getActiveEditor();
@@ -184,6 +238,7 @@ class LeetCodeWorkbenchProvider {
                 cases: [],
                 dirty: false,
                 result: this.currentResult,
+                activity: this.currentActivity,
                 aiDebugEnabled: this.aiDebugEnabled,
             };
         }
@@ -198,6 +253,7 @@ class LeetCodeWorkbenchProvider {
             cases,
             dirty: editor.document.isDirty,
             result: this.currentResult,
+            activity: this.currentActivity,
             aiDebugEnabled: this.aiDebugEnabled,
         };
     }
@@ -386,6 +442,7 @@ class LeetCodeWorkbenchProvider {
         };
         this.currentState = this.readState();
         this.postState();
+        this.ensureActivityLoaded();
     }
     showResult(payload) {
         const previousResult = this.currentResult || {};
@@ -397,6 +454,9 @@ class LeetCodeWorkbenchProvider {
         }, payload || {});
         this.currentState = this.readState();
         this.postState();
+        const data = this.getResultData(this.currentResult);
+        const sys = data.system_message || this.currentResult.submitEvent || {};
+        this.ensureActivityLoaded(this.currentResult.action === "submit" || sys.sub_type === "submit");
     }
     getResultData(payload) {
         return (payload && payload.result) || payload || {};
@@ -463,6 +523,27 @@ class LeetCodeWorkbenchProvider {
       --panel-pad-x: 12px;
       --lcpr-success-deep: #137333;
       --lcpr-focus-gray: #b7b7b7;
+      --lcpr-workbench-bg: var(--vscode-sideBar-background);
+      --lcpr-workbench-fg: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+      --lcpr-workbench-muted: var(--vscode-descriptionForeground, var(--lcpr-workbench-fg));
+      --lcpr-workbench-border: var(--vscode-sideBar-border);
+      --lcpr-workbench-input: var(--vscode-input-background);
+      --lcpr-workbench-hover: var(--vscode-toolbar-hoverBackground);
+      --lcpr-workbench-case-bg: var(--lcpr-workbench-input);
+      --lcpr-workbench-case-editor-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 88%, var(--lcpr-workbench-fg) 12%);
+      --lcpr-workbench-case-editor-border: transparent;
+    }
+    body.vscode-dark {
+      --lcpr-success-deep: #2ea043;
+      --lcpr-workbench-bg: var(--vscode-sideBar-background, #1f2028);
+      --lcpr-workbench-fg: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 92%, #ffffff 8%);
+      --lcpr-workbench-muted: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 72%, var(--vscode-sideBar-background, #1f2028) 28%);
+      --lcpr-workbench-border: color-mix(in srgb, var(--vscode-editor-foreground, #e6edf3) 18%, transparent);
+      --lcpr-workbench-input: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 84%, #ffffff 10%);
+      --lcpr-workbench-hover: color-mix(in srgb, var(--vscode-sideBar-background, #1f2028) 72%, #ffffff 15%);
+      --lcpr-workbench-case-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 76%, #ffffff 14%);
+      --lcpr-workbench-case-editor-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 98%, #ffffff 2%);
+      --lcpr-workbench-case-editor-border: color-mix(in srgb, var(--lcpr-workbench-fg) 6%, transparent);
     }
     * { box-sizing: border-box; }
     body {
@@ -472,8 +553,8 @@ class LeetCodeWorkbenchProvider {
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      color: var(--vscode-sideBar-foreground);
-      background: var(--vscode-sideBar-background);
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-bg);
       font: 12px var(--vscode-font-family);
     }
     button, textarea {
@@ -487,8 +568,8 @@ class LeetCodeWorkbenchProvider {
       gap: 8px;
       min-height: 32px;
       padding: 4px var(--panel-pad-x);
-      border-bottom: 1px solid var(--vscode-sideBar-border);
-      background: var(--vscode-sideBar-background);
+      border-bottom: 1px solid var(--lcpr-workbench-border);
+      background: var(--lcpr-workbench-bg);
       z-index: 2;
     }
     .toolbar-group {
@@ -511,7 +592,7 @@ class LeetCodeWorkbenchProvider {
       align-items: center;
       gap: 5px;
       padding: 0 6px;
-      color: var(--vscode-button-secondaryForeground);
+      color: var(--lcpr-workbench-muted);
       white-space: nowrap;
       user-select: none;
     }
@@ -528,8 +609,8 @@ class LeetCodeWorkbenchProvider {
       cursor: pointer;
     }
     .toolbar-check input:checked {
-      border-color: var(--vscode-descriptionForeground, #767676);
-      background: var(--vscode-descriptionForeground, #767676);
+      border-color: var(--lcpr-workbench-muted);
+      background: var(--lcpr-workbench-muted);
     }
     .toolbar-check input:checked::after {
       content: "";
@@ -538,7 +619,7 @@ class LeetCodeWorkbenchProvider {
       top: 1px;
       width: 4px;
       height: 8px;
-      border: solid var(--vscode-sideBar-background, #ffffff);
+      border: solid var(--lcpr-workbench-bg, #ffffff);
       border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
@@ -551,12 +632,12 @@ class LeetCodeWorkbenchProvider {
       padding: 0 7px;
       border: 1px solid transparent;
       border-radius: 3px;
-      color: var(--vscode-button-secondaryForeground);
+      color: var(--lcpr-workbench-muted);
       background: transparent;
       cursor: pointer;
     }
     .toolbar button:hover:not(:disabled), .case-actions button:hover:not(:disabled) {
-      background: var(--vscode-toolbar-hoverBackground);
+      background: var(--lcpr-workbench-hover);
     }
     .toolbar button:disabled, .case-actions button:disabled {
       opacity: .45;
@@ -570,13 +651,13 @@ class LeetCodeWorkbenchProvider {
       background: var(--vscode-button-hoverBackground);
     }
     .toolbar .important {
-      color: var(--vscode-button-secondaryForeground);
+      color: var(--lcpr-workbench-muted);
       background: transparent;
       border-color: transparent;
       font-weight: 500;
     }
     .toolbar .important:hover {
-      background: var(--vscode-toolbar-hoverBackground);
+      background: var(--lcpr-workbench-hover);
     }
     .problem-title {
       position: absolute;
@@ -586,7 +667,7 @@ class LeetCodeWorkbenchProvider {
       width: min(48vw, 680px);
       min-width: 0;
       padding: 0 8px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-weight: 600;
       text-align: center;
       white-space: nowrap;
@@ -606,15 +687,16 @@ class LeetCodeWorkbenchProvider {
       min-width: 0;
       min-height: 0;
       overflow: auto;
-      border-left: 1px solid var(--vscode-sideBar-border);
+      border-left: 1px solid var(--lcpr-workbench-border);
     }
     .result-pane {
       min-width: 0;
       min-height: 0;
       overflow: auto;
-      background: var(--vscode-sideBar-background);
+      background: var(--lcpr-workbench-bg);
     }
     .result-sticky {
+      position: relative;
       min-height: 100%;
     }
     .result-header {
@@ -623,12 +705,12 @@ class LeetCodeWorkbenchProvider {
       gap: 8px;
       min-height: 32px;
       padding: 4px var(--panel-pad-x);
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-weight: 600;
     }
     .result-header .muted {
       margin-left: auto;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-weight: 400;
     }
     #result .result-header {
@@ -642,7 +724,7 @@ class LeetCodeWorkbenchProvider {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--vscode-descriptionForeground);
+      background: var(--lcpr-workbench-muted);
     }
     #result .result-dot {
       width: 10px;
@@ -652,7 +734,7 @@ class LeetCodeWorkbenchProvider {
     .tone-danger { --tone: var(--vscode-testing-iconFailed, #d1242f); }
     .tone-warning { --tone: var(--vscode-testing-iconQueued, #bf8700); }
     .tone-running { --tone: var(--vscode-progressBar-background, #0e70c0); }
-    .tone-neutral { --tone: var(--vscode-descriptionForeground); }
+    .tone-neutral { --tone: var(--lcpr-workbench-muted); }
     .tone-success .result-dot,
     .tone-danger .result-dot,
     .tone-warning .result-dot,
@@ -670,13 +752,140 @@ class LeetCodeWorkbenchProvider {
       padding-top: 3px;
     }
     .result-waiting {
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-size: 13px;
       line-height: 1.45;
     }
+    .activity-tip {
+      position: absolute;
+      right: var(--panel-pad-x);
+      bottom: 10px;
+      max-width: min(72%, 248px);
+      color: var(--lcpr-workbench-muted);
+      background: transparent;
+      font-size: 11px;
+      z-index: 10;
+    }
+    .activity-trigger {
+      display: block;
+      max-width: 100%;
+      height: 22px;
+      padding: 0 0;
+      border: 0;
+      color: var(--lcpr-workbench-muted);
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      line-height: 22px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .activity-trigger:hover {
+      color: var(--lcpr-workbench-fg);
+    }
+    .activity-trigger strong,
+    .activity-summary strong {
+      color: var(--lcpr-workbench-fg);
+      font-weight: 700;
+    }
+    .activity-popover {
+      position: absolute;
+      right: 0;
+      bottom: 28px;
+      display: grid;
+      gap: 8px;
+      width: min(248px, calc(100vw - 28px));
+      padding: 9px 10px;
+      border: 1px solid var(--lcpr-workbench-border);
+      border-radius: 4px;
+      background: var(--vscode-editorWidget-background, var(--lcpr-workbench-bg));
+      box-shadow: 0 8px 20px var(--vscode-widget-shadow, rgba(0, 0, 0, .32));
+      box-sizing: border-box;
+      pointer-events: auto;
+    }
+    .activity-range {
+      display: inline-flex;
+      justify-self: end;
+      gap: 2px;
+      padding: 2px;
+      border-radius: 3px;
+      background: var(--lcpr-workbench-input);
+    }
+    .activity-range button {
+      height: 20px;
+      padding: 0 7px;
+      border: 0;
+      border-radius: 2px;
+      color: var(--lcpr-workbench-muted);
+      background: var(--lcpr-workbench-input);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .activity-range button.active {
+      color: var(--vscode-button-foreground);
+      background: var(--vscode-button-background);
+    }
+    .activity-grid {
+      --activity-cell: 8px;
+      --activity-gap: 4px;
+      --activity-grid-height: 28px;
+      display: grid;
+      gap: var(--activity-gap);
+      align-content: center;
+      justify-content: end;
+      min-height: var(--activity-grid-height);
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .activity-grid.range-week {
+      --activity-cell: 10px;
+      --activity-gap: 5px;
+      grid-template-columns: repeat(7, var(--activity-cell));
+    }
+    .activity-grid.range-month {
+      --activity-cell: 8px;
+      --activity-gap: 4px;
+      grid-template-columns: repeat(15, var(--activity-cell));
+    }
+    .activity-grid.range-year {
+      --activity-cell: 3px;
+      --activity-gap: 1px;
+      grid-auto-flow: column;
+      grid-auto-columns: var(--activity-cell);
+      grid-template-rows: repeat(7, var(--activity-cell));
+    }
+    .activity-pad,
+    .activity-day {
+      width: var(--activity-cell);
+      height: var(--activity-cell);
+      border-radius: 2px;
+    }
+    .activity-pad {
+      background: transparent;
+    }
+    .activity-day {
+      background: var(--lcpr-workbench-input);
+    }
+    .activity-l1 { background: #2f6f46; }
+    .activity-l2 { background: #328a50; }
+    .activity-l3 { background: #279047; }
+    .activity-l4 { background: var(--lcpr-success-deep); }
+    .activity-summary {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 5px 11px;
+      color: var(--lcpr-workbench-muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .activity-range button:hover {
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-hover);
+    }
     .result-status {
       margin: 0;
-      color: var(--tone, var(--vscode-sideBar-foreground));
+      color: var(--tone, var(--lcpr-workbench-fg));
       font-size: 24px;
       line-height: 1.2;
       font-weight: 800;
@@ -694,16 +903,16 @@ class LeetCodeWorkbenchProvider {
       min-width: 0;
       margin: 0 0 8px;
       padding: 9px 12px 10px;
-      border: 1px solid color-mix(in srgb, var(--vscode-sideBar-border) 58%, transparent);
+      border: 1px solid color-mix(in srgb, var(--lcpr-workbench-border) 58%, transparent);
       border-radius: 4px;
-      background: var(--vscode-input-background);
+      background: var(--lcpr-workbench-input);
     }
     .result-summary-case {
       min-width: 0;
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-family: var(--vscode-editor-font-family);
       font-size: 13px;
       font-weight: 700;
@@ -714,7 +923,7 @@ class LeetCodeWorkbenchProvider {
     .result-summary-meta,
     .result-summary-time {
       min-width: 0;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       overflow: hidden;
       text-overflow: ellipsis;
       font-family: var(--vscode-editor-font-family);
@@ -739,7 +948,7 @@ class LeetCodeWorkbenchProvider {
     .result-lines li {
       position: relative;
       padding-left: 14px;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       line-height: 1.45;
     }
     .result-lines li::before {
@@ -750,7 +959,7 @@ class LeetCodeWorkbenchProvider {
       width: 5px;
       height: 5px;
       border-radius: 50%;
-      background: var(--tone, var(--vscode-descriptionForeground));
+      background: var(--tone, var(--lcpr-workbench-muted));
     }
     .performance-grid {
       display: grid;
@@ -761,9 +970,9 @@ class LeetCodeWorkbenchProvider {
     .performance-card {
       min-width: 0;
       padding: 7px 8px;
-      border: 1px solid var(--vscode-sideBar-border);
+      border: 1px solid var(--lcpr-workbench-border);
       border-radius: 4px;
-      background: var(--vscode-input-background);
+      background: var(--lcpr-workbench-input);
       animation: performanceCardIn .34s cubic-bezier(.2, .8, .2, 1) both;
       animation-delay: var(--card-delay, 0ms);
     }
@@ -777,7 +986,7 @@ class LeetCodeWorkbenchProvider {
     .performance-title {
       flex: 1 1 auto;
       min-width: 0;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 10px;
       font-weight: 600;
       white-space: nowrap;
@@ -786,7 +995,7 @@ class LeetCodeWorkbenchProvider {
     }
     .performance-value {
       flex: 0 0 auto;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-family: var(--vscode-editor-font-family);
       font-weight: 700;
       white-space: nowrap;
@@ -812,7 +1021,7 @@ class LeetCodeWorkbenchProvider {
       gap: 2px;
       height: 38px;
       padding-top: 3px;
-      border-bottom: 1px solid var(--vscode-sideBar-border);
+      border-bottom: 1px solid var(--lcpr-workbench-border);
     }
         .performance-bars::after {
           content: "";
@@ -873,14 +1082,14 @@ class LeetCodeWorkbenchProvider {
       display: flex;
       justify-content: space-between;
       gap: 8px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 9px;
       font-family: var(--vscode-editor-font-family);
     }
     .performance-note {
       display: none;
       margin-top: 5px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 10px;
     }
     .performance-strip {
@@ -888,8 +1097,8 @@ class LeetCodeWorkbenchProvider {
       height: 10px;
       overflow: hidden;
       border-radius: 999px;
-      background: var(--vscode-sideBar-background);
-      border: 1px solid var(--vscode-sideBar-border);
+      background: var(--lcpr-workbench-bg);
+      border: 1px solid var(--lcpr-workbench-border);
     }
     .performance-strip-fill {
       display: block;
@@ -911,7 +1120,7 @@ class LeetCodeWorkbenchProvider {
     }
     .performance-empty {
       padding: 7px 0 1px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 11px;
     }
     .result-diagnostics-grid {
@@ -933,7 +1142,7 @@ class LeetCodeWorkbenchProvider {
     }
     .result-section-title {
       margin: 0 0 5px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 11px;
       font-weight: 600;
     }
@@ -953,7 +1162,7 @@ class LeetCodeWorkbenchProvider {
       word-break: break-word;
     }
     .visualize {
-      border-top: 1px solid var(--vscode-sideBar-border);
+      border-top: 1px solid var(--lcpr-workbench-border);
     }
     .visualize:empty {
       display: none;
@@ -972,12 +1181,12 @@ class LeetCodeWorkbenchProvider {
       padding: 0 7px;
       border: 1px solid transparent;
       border-radius: 3px;
-      color: var(--vscode-button-secondaryForeground);
+      color: var(--lcpr-workbench-muted);
       background: transparent;
       cursor: pointer;
     }
     .visualize-actions button:hover:not(:disabled), .visualize-debug-actions button:hover:not(:disabled) {
-      background: var(--vscode-toolbar-hoverBackground);
+      background: var(--lcpr-workbench-hover);
     }
     .visualize-actions .primary {
       color: var(--vscode-button-foreground);
@@ -992,25 +1201,25 @@ class LeetCodeWorkbenchProvider {
     }
     .visualize-meta {
       margin-bottom: 7px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 11px;
     }
     .visualize-step {
       padding: 8px 9px;
-      border: 1px solid var(--vscode-sideBar-border);
+      border: 1px solid var(--lcpr-workbench-border);
       border-radius: 4px;
-      background: var(--vscode-input-background);
+      background: var(--lcpr-workbench-input);
     }
     .visualize-title {
       margin: 0 0 5px;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-size: 13px;
       line-height: 1.35;
       font-weight: 600;
     }
     .visualize-text {
       margin: 0;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       line-height: 1.45;
       word-break: break-word;
     }
@@ -1024,7 +1233,7 @@ class LeetCodeWorkbenchProvider {
       grid-template-columns: minmax(70px, 35%) minmax(0, 1fr);
       gap: 6px;
       min-width: 0;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-family: var(--vscode-editor-font-family);
       font-size: 11px;
     }
@@ -1038,7 +1247,7 @@ class LeetCodeWorkbenchProvider {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-weight: 600;
       white-space: nowrap;
     }
@@ -1079,7 +1288,7 @@ class LeetCodeWorkbenchProvider {
       min-width: 34px;
     }
     .scene-pointer {
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 10px;
       line-height: 16px;
       white-space: nowrap;
@@ -1093,7 +1302,7 @@ class LeetCodeWorkbenchProvider {
       place-items: center;
       width: 34px;
       height: 34px;
-      border: 1px solid var(--vscode-sideBar-border);
+      border: 1px solid var(--lcpr-workbench-border);
       border-radius: 4px;
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
@@ -1111,20 +1320,20 @@ class LeetCodeWorkbenchProvider {
       outline-offset: 1px;
     }
     .scene-index {
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       font-size: 10px;
       line-height: 14px;
     }
     .scene-map {
-      border: 1px solid var(--vscode-sideBar-border);
+      border: 1px solid var(--lcpr-workbench-border);
       border-radius: 4px;
       overflow: hidden;
-      background: var(--vscode-input-background);
+      background: var(--lcpr-workbench-input);
     }
     .scene-map-title {
       padding: 5px 7px;
-      color: var(--vscode-descriptionForeground);
-      border-bottom: 1px solid var(--vscode-sideBar-border);
+      color: var(--lcpr-workbench-muted);
+      border-bottom: 1px solid var(--lcpr-workbench-border);
       font-size: 11px;
       font-weight: 600;
     }
@@ -1132,7 +1341,7 @@ class LeetCodeWorkbenchProvider {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
       gap: 1px;
-      background: var(--vscode-sideBar-border);
+      background: var(--lcpr-workbench-border);
     }
     .scene-map-item {
       display: flex;
@@ -1140,8 +1349,8 @@ class LeetCodeWorkbenchProvider {
       gap: 6px;
       min-width: 0;
       padding: 5px 7px;
-      color: var(--vscode-sideBar-foreground);
-      background: var(--vscode-input-background);
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-input);
       font: 11px var(--vscode-editor-font-family);
     }
     .scene-map-item strong,
@@ -1153,7 +1362,7 @@ class LeetCodeWorkbenchProvider {
     }
     .visualize-debug {
       margin-top: 8px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
     }
     .visualize-debug summary {
       cursor: pointer;
@@ -1191,7 +1400,7 @@ class LeetCodeWorkbenchProvider {
     }
     .empty {
       padding: 18px 12px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
     }
     .result-pane .empty {
       padding: 6px var(--panel-pad-x) 14px;
@@ -1207,7 +1416,7 @@ class LeetCodeWorkbenchProvider {
       padding: 0 7px 5px 18px;
       border: 0;
       border-radius: 4px;
-      background: var(--vscode-input-background);
+      background: var(--lcpr-workbench-case-bg);
       overflow: hidden;
     }
     .case::before {
@@ -1216,7 +1425,7 @@ class LeetCodeWorkbenchProvider {
       inset: 0 auto 0 0;
       width: 5px;
       border-radius: 0;
-      background: var(--vscode-descriptionForeground);
+      background: var(--lcpr-workbench-muted);
       opacity: .72;
     }
     .case.case-pass {
@@ -1243,7 +1452,7 @@ class LeetCodeWorkbenchProvider {
     }
     .case-title {
       min-width: 0;
-      color: var(--vscode-sideBar-foreground);
+      color: var(--lcpr-workbench-fg);
       font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
@@ -1263,17 +1472,17 @@ class LeetCodeWorkbenchProvider {
       padding: 0;
       border: 0;
       border-radius: 4px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--lcpr-workbench-muted);
       background: transparent;
       line-height: 1;
     }
     .case-actions button:hover {
-      color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-hoverBackground);
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-hover);
     }
     .case-actions button:active {
-      color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground));
+      color: var(--lcpr-workbench-fg);
+      background: var(--vscode-toolbar-activeBackground, var(--lcpr-workbench-hover));
     }
     .case-actions svg {
       width: 14px;
@@ -1298,15 +1507,15 @@ class LeetCodeWorkbenchProvider {
       place-items: center;
       width: 30px;
       height: 30px;
-      border: 1px solid var(--vscode-input-border, var(--vscode-sideBar-border));
+      border: 1px solid var(--vscode-input-border, var(--lcpr-workbench-border));
       border-radius: 50%;
-      color: var(--vscode-descriptionForeground);
-      background: var(--vscode-input-background);
+      color: var(--lcpr-workbench-muted);
+      background: var(--lcpr-workbench-input);
       cursor: pointer;
     }
     .case-add-button:hover {
-      color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-hoverBackground);
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-hover);
     }
     .case-add-button svg {
       width: 16px;
@@ -1326,9 +1535,9 @@ class LeetCodeWorkbenchProvider {
       resize: none;
       overflow: hidden;
       padding: 4px 8px;
-      color: var(--vscode-input-foreground);
-      background: color-mix(in srgb, var(--vscode-sideBar-background) 94%, var(--vscode-input-foreground) 6%);
-      border: 0;
+      color: var(--vscode-input-foreground, var(--lcpr-workbench-fg));
+      background: var(--lcpr-workbench-case-editor-bg);
+      border: 1px solid var(--lcpr-workbench-case-editor-border);
       border-radius: 3px;
       font-family: var(--vscode-editor-font-family);
       line-height: 20px;
@@ -1402,7 +1611,7 @@ class LeetCodeWorkbenchProvider {
       }
       .result-pane {
         overflow: visible;
-        border-top: 1px solid var(--vscode-sideBar-border);
+        border-top: 1px solid var(--lcpr-workbench-border);
       }
       .case-pane {
         overflow: visible;
@@ -1438,7 +1647,7 @@ class LeetCodeWorkbenchProvider {
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    let state = { isLeetCodeFile: false, cases: [] };
+    let state = { isLeetCodeFile: false, cases: [], activityExpanded: false, activityRange: 7 };
     const content = document.getElementById('content');
     const file = document.getElementById('file');
     const resultEl = document.getElementById('result');
@@ -1981,16 +2190,92 @@ class LeetCodeWorkbenchProvider {
       if (active && active === current) return ' case-fail';
       return '';
     }
+    function activityDays(activity) {
+      const range = Number(state.activityRange || 7);
+      return ((activity && Array.isArray(activity.days)) ? activity.days : [])
+        .filter((day) => day && day.date)
+        .slice()
+        .sort((a, b) => {
+          const left = Number(a.timestamp || Date.parse(String(a.date) + 'T00:00:00Z') / 1000);
+          const right = Number(b.timestamp || Date.parse(String(b.date) + 'T00:00:00Z') / 1000);
+          if (!Number.isFinite(left) || !Number.isFinite(right)) return String(a.date).localeCompare(String(b.date));
+          return left - right;
+        })
+        .slice(-range);
+    }
+    function activityLevel(count, maxCount) {
+      const value = Number(count || 0);
+      if (value <= 0) return 0;
+      const max = Math.max(Number(maxCount || 0), 1);
+      const ratio = value / max;
+      if (ratio <= .25) return 1;
+      if (ratio <= .5) return 2;
+      if (ratio <= .75) return 3;
+      return 4;
+    }
+    function activityStartOffset(days) {
+      if (!days.length) return 0;
+      const value = new Date(String(days[0].date) + 'T00:00:00Z');
+      if (Number.isNaN(value.getTime())) return 0;
+      return (value.getUTCDay() + 6) % 7;
+    }
+    function renderActivityGrid(days, range) {
+      const maxCount = Math.max(...days.map((day) => Number(day.count || 0)), 1);
+      const pads = Number(range) === 365 ? Array.from({ length: activityStartOffset(days) }, () => '<span class="activity-pad"></span>').join('') : '';
+      const cells = days.map((day) => {
+        const count = Number(day.count || 0);
+        const level = activityLevel(count, maxCount);
+        const title = day.date + '：' + count + ' 次';
+        return '<span class="activity-day activity-l' + level + '" title="' + escapeHtml(title) + '"></span>';
+      }).join('');
+      return pads + cells;
+    }
+    function rangeLabel(value) {
+      if (Number(value) === 365) return '近一年';
+      if (Number(value) === 30) return '近一月';
+      return '近一周';
+    }
+    function renderRangeButton(value) {
+      const active = Number(state.activityRange || 7) === Number(value);
+      return '<button type="button" class="' + (active ? 'active' : '') + '" data-activity-range="' + value + '">' + rangeLabel(value) + '</button>';
+    }
+    function renderActivityTip() {
+      const activity = state.activity || {};
+      const days = activityDays(activity);
+      if (!days.length && activity.status !== 'loading') return '';
+      if (activity.status === 'loading') {
+        return '<div class="activity-tip"><button class="activity-trigger" data-toggle-activity>打卡加载中</button></div>';
+      }
+      const activeDays = days.filter((day) => Number(day.count || 0) > 0).length;
+      const streak = Number(activity.recentStreak || activity.streak || 0);
+      const today = days[days.length - 1] || {};
+      const todayCount = Number(today.count || 0);
+      const range = Number(state.activityRange || 7);
+      const rangeClass = range === 365 ? 'range-year' : (range === 30 ? 'range-month' : 'range-week');
+      const trigger = '<button type="button" class="activity-trigger" data-toggle-activity title="显示打卡热力图">' + rangeLabel(range) + ' <strong>' + activeDays + '</strong> 天 · 连续 <strong>' + streak + '</strong> 天 · 今日 <strong>' + todayCount + '</strong> 提交</button>';
+      if (!state.activityExpanded) {
+        return '<div class="activity-tip">' + trigger + '</div>';
+      }
+      const popover = '<div class="activity-popover">' +
+        '<div class="activity-range">' + renderRangeButton(7) + renderRangeButton(30) + renderRangeButton(365) + '</div>' +
+        '<div class="activity-grid ' + rangeClass + '">' + renderActivityGrid(days, range) + '</div>' +
+        '<div class="activity-summary"><span>活跃 <strong>' + activeDays + '</strong> 天</span></div>' +
+      '</div>';
+      return '<div class="activity-tip">' + popover + trigger + '</div>';
+    }
+    function renderActivityStatus(tone, label, message) {
+      return '<div class="result-header ' + tone + '"><span class="result-dot"></span><span>' + escapeHtml(label) + '</span></div><div class="result-body ' + tone + '"><div class="result-waiting">' + escapeHtml(message) + '</div></div>' + renderActivityTip();
+    }
     function renderResult() {
       const payload = state.result;
       if (!payload) {
-        resultEl.innerHTML = '<div class="result-header tone-neutral"><span class="result-dot"></span><span>空闲</span></div><div class="empty">运行用例、全部用例或提交后，这里会显示最新结果。</div>';
+        resultEl.innerHTML = renderActivityStatus('tone-neutral', '空闲', '运行用例、全部用例或提交后，这里会显示最新结果。');
         return;
       }
       const tone = getTone(payload);
       if (payload.phase === 'running') {
         const waitingText = payload.action === 'debug' ? '正在启动 C++ 调试器。' : '等待 LeetCode 返回结果。';
-        resultEl.innerHTML = '<div class="result-header tone-running"><span class="result-dot"></span><span>运行</span></div><div class="result-body tone-running"><div class="result-waiting">' + waitingText + '</div></div>';
+        resultEl.innerHTML = renderActivityStatus('tone-running', '运行', waitingText);
         return;
       }
       resultEl.innerHTML = '<div class="result-body ' + tone + '">' + resultSummary(payload) + summaryLines(payload) + renderPerformanceCharts(payload) + diagnostics(payload) + '</div>';
@@ -2098,6 +2383,25 @@ class LeetCodeWorkbenchProvider {
         send({ type: 'action', action, enableAiDebug: !!state.aiDebugEnabled });
       }
     });
+    resultEl.addEventListener('click', (event) => {
+      const rangeTarget = event.target && event.target.closest ? event.target.closest('[data-activity-range]') : undefined;
+      if (rangeTarget) {
+        state.activityRange = Number(rangeTarget.getAttribute('data-activity-range')) || 7;
+        state.activityExpanded = true;
+        renderResult();
+        return;
+      }
+      const toggleTarget = event.target && event.target.closest ? event.target.closest('[data-toggle-activity]') : undefined;
+      if (!toggleTarget) {
+        if (state.activityExpanded) {
+          state.activityExpanded = false;
+          renderResult();
+        }
+        return;
+      }
+      state.activityExpanded = !state.activityExpanded;
+      renderResult();
+    });
     aiDebugToggle.addEventListener('change', () => {
       state.aiDebugEnabled = aiDebugToggle.checked;
       send({ type: 'setAiDebugEnabled', value: state.aiDebugEnabled });
@@ -2159,7 +2463,12 @@ class LeetCodeWorkbenchProvider {
     });
     window.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'state') {
-        state = event.data.state;
+        const localActivityExpanded = !!state.activityExpanded;
+        const localActivityRange = Number(state.activityRange || 7) || 7;
+        state = Object.assign({ activityExpanded: false, activityRange: 7 }, event.data.state || {}, {
+          activityExpanded: localActivityExpanded,
+          activityRange: localActivityRange,
+        });
         render();
       }
     });

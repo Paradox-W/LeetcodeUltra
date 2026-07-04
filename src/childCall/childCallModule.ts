@@ -313,6 +313,21 @@ class ExecuteService {
             return yield this.callWithMsg("正在获取提交详情~", this.nodeExecutable, cmd);
         });
     }
+    getUserActivityCalendar(username, days, year) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const cmd = [yield this.getLeetCodeBinaryPath(), "activity"];
+            if (username) {
+                cmd.push(username);
+            }
+            if (days) {
+                cmd.push("-d", String(days));
+            }
+            if (year) {
+                cmd.push("-y", String(year));
+            }
+            return yield this.callWithMsg("正在获取打卡数据~", this.nodeExecutable, cmd);
+        });
+    }
     submitSolution(filePath) {
         return __awaiter(this, void 0, void 0, function* () {
             try {

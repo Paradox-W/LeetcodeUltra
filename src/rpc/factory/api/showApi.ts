@@ -115,6 +115,7 @@ class ShowApi extends ApiBase {
     }
 
     let preview_data: any = {};
+    preview_data.title = problem.name;
     preview_data.url = problem.link;
     preview_data.category = `${problem.category}`;
     preview_data.difficulty = `${problem.level} (${problem.percent.toFixed(2)}%)`;

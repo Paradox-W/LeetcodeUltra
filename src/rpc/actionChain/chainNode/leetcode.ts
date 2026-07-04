@@ -792,6 +792,101 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                 });
             }
         };
+        this.getUserActivityCalendar = (username, year, cb) => {
+            const userSlug = String(username || "").trim();
+            if (!userSlug) {
+                return cb("missing username");
+            }
+            const requestedYear = Number(year);
+            const hasYear = Number.isFinite(requestedYear) && requestedYear > 0;
+            if (configUtils_1.configUtils.isCN()) {
+                const opts = makeOpts(configUtils_1.configUtils.sys.urls.noj_go || configUtils_1.configUtils.sys.urls.graphql);
+                opts.headers.Origin = configUtils_1.configUtils.sys.urls.base;
+                opts.headers.Referer = configUtils_1.configUtils.sys.urls.u
+                    ? configUtils_1.configUtils.sys.urls.u.replace("$username", userSlug)
+                    : configUtils_1.configUtils.sys.urls.base;
+                opts.json = true;
+                opts.body = {
+                    operationName: "userCalendar",
+                    variables: hasYear ? { userSlug, year: requestedYear } : { userSlug },
+                    query: [
+                        "query userCalendar($userSlug: String!, $year: Int) {",
+                        "  userCalendar(userSlug: $userSlug, year: $year) {",
+                        "    streak",
+                        "    recentStreak",
+                        "    totalActiveDays",
+                        "    activeYears",
+                        "    submissionCalendar",
+                        "  }",
+                        "}",
+                    ].join("\n"),
+                };
+                return request.post(opts, function (e, resp, body) {
+                    e = checkError(e, resp, 200);
+                    if (e)
+                        return cb(e);
+                    if (body && body.errors && body.errors.length) {
+                        return cb(body.errors[0].message || body.errors[0]);
+                    }
+                    const calendar = body && body.data && body.data.userCalendar;
+                    if (!calendar) {
+                        return cb("empty user calendar");
+                    }
+                    return cb(null, {
+                        username: userSlug,
+                        userSlug,
+                        endpoint: "leetcode.cn",
+                        source: "userCalendar",
+                        year: hasYear ? requestedYear : undefined,
+                        calendar,
+                    });
+                });
+            }
+            const opts = makeOpts(configUtils_1.configUtils.sys.urls.graphql);
+            opts.headers.Origin = configUtils_1.configUtils.sys.urls.base;
+            opts.headers.Referer = configUtils_1.configUtils.sys.urls.base + "/u/" + encodeURIComponent(userSlug) + "/";
+            opts.json = true;
+            opts.body = {
+                operationName: "userProfileCalendar",
+                variables: hasYear ? { username: userSlug, year: requestedYear } : { username: userSlug },
+                query: [
+                    "query userProfileCalendar($username: String!, $year: Int) {",
+                    "  matchedUser(username: $username) {",
+                    "    username",
+                    "    userCalendar(year: $year) {",
+                    "      activeYears",
+                    "      streak",
+                    "      totalActiveDays",
+                    "      submissionCalendar",
+                    "    }",
+                    "  }",
+                    "}",
+                ].join("\n"),
+            };
+            opts.json = opts.body;
+            delete opts.body;
+            this.h2request.post(opts, function (e, resp, body) {
+                e = checkError(e, resp, 200);
+                if (e)
+                    return cb(e);
+                if (body && body.errors && body.errors.length) {
+                    return cb(body.errors[0].message || body.errors[0]);
+                }
+                const matchedUser = body && body.data && body.data.matchedUser;
+                const calendar = matchedUser && matchedUser.userCalendar;
+                if (!calendar) {
+                    return cb("empty user calendar");
+                }
+                return cb(null, {
+                    username: matchedUser.username || userSlug,
+                    userSlug: matchedUser.username || userSlug,
+                    endpoint: "leetcode.com",
+                    source: "matchedUser.userCalendar",
+                    year: hasYear ? requestedYear : undefined,
+                    calendar,
+                });
+            });
+        };
         /* Making a request to the server and returning the response. */
         this.runSession = (method, data, cb) => {
             const opts = makeOpts(configUtils_1.configUtils.sys.urls.session);

@@ -35,6 +35,7 @@ class RetryPlugin extends ChainNodeBase {
       "getSessions",
       "getSubmissions",
       "getSubmission",
+      "getUserActivityCalendar",
       "getFavorites",
       "testProblem",
       "submitProblem",

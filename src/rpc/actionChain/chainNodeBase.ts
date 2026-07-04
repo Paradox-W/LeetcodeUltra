@@ -49,6 +49,9 @@ export class ChainNodeBase {
   public getUserContestP(username, cb: Function): void {
     this.next.getUserContestP(username, cb);
   }
+  public getUserActivityCalendar(username, year, cb: Function): void {
+    this.next.getUserActivityCalendar(username, year, cb);
+  }
   public getProblemsTitle(cb: Function): void {
     this.next.getProblemsTitle(cb);
   }

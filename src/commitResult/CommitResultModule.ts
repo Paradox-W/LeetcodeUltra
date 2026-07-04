@@ -65,22 +65,22 @@ class SubmissionService extends BaseWebviewService_1.BaseWebViewService {
             let qid = (_a = submit_event === null || submit_event === void 0 ? void 0 : submit_event.qid) === null || _a === void 0 ? void 0 : _a.toString();
             this.tempTestCase.set(qid, tsd);
         }
-        this.triggerRaycastConfetti(submit_event);
+        this.triggerHammerspoonCelebration(submit_event);
         BABA_1.BABA.sendNotification(BABA_1.BabaStr.CommitResult_showFinish, submit_event);
     }
-    triggerRaycastConfetti(submitEvent) {
+    triggerHammerspoonCelebration(submitEvent) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!submitEvent || submitEvent.sub_type !== "submit" || submitEvent.accepted !== true) {
                 return;
             }
             try {
-                const opened = yield vscode_1.env.openExternal(vscode_1.Uri.parse("raycast://confetti"));
+                const opened = yield vscode_1.env.openExternal(vscode_1.Uri.parse("hammerspoon://leetcodeultra-ac"));
                 if (!opened) {
-                    vscode_1.window.showWarningMessage("LeetCode AC celebration needs Raycast installed and its confetti URL handler enabled.");
+                    vscode_1.window.showWarningMessage("LeetCode AC celebration needs Hammerspoon running with the LeetcodeUltra URL handler loaded.");
                 }
             }
             catch (error) {
-                vscode_1.window.showWarningMessage("LeetCode AC celebration needs Raycast installed and its confetti URL handler enabled.");
+                vscode_1.window.showWarningMessage("LeetCode AC celebration needs Hammerspoon running with the LeetcodeUltra URL handler loaded.");
             }
         });
     }

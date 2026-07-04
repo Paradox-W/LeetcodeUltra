@@ -165,6 +165,12 @@ class CorePlugin extends ChainNodeBase {
       return cb(null, result);
     });
   };
+  getUserActivityCalendar = (username, year, cb) => {
+    this.next.getUserActivityCalendar(username, year, function (e, result) {
+      if (e) return cb(e);
+      return cb(null, result);
+    });
+  };
   getHelp = (problem, cn_flag, lang) => {
     this.getHelpOnline(problem, cn_flag, lang);
   };

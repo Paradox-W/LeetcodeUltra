@@ -7,6 +7,7 @@ import * as starApi_1 from "./api/starApi";
 import * as submitApi_1 from "./api/submitApi";
 import * as submissionsApi_1 from "./api/submissionsApi";
 import * as testApi_1 from "./api/testApi";
+import * as activityApi_1 from "./api/activityApi";
 import * as userApi_1 from "./api/userApi";
 class ApiFactory {
     constructor() { }
@@ -31,6 +32,9 @@ class ApiFactory {
         }
         else if (api == "submissions") {
             return submissionsApi_1.submissionsApi;
+        }
+        else if (api == "activity") {
+            return activityApi_1.activityApi;
         }
         else if (api == "test") {
             return testApi_1.testApi;

@@ -165,7 +165,7 @@ class PreviewService extends BaseWebviewService_1.BaseWebViewService {
         var _a, _b, _c;
         let preview_data = JSON.parse(descString);
         return {
-            title: problem.name,
+            title: preview_data.title || problem.name,
             url: preview_data.url,
             tags: problem.tags,
             companies: problem.companies,

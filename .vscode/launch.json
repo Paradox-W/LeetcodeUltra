@@ -16,7 +16,7 @@
                 "--no-warnings",
                 "/Users/paradox/Documents/Leetcode/Leetcode.code-workspace"
             ],
-            "autoAttachChildProcesses": true,
+            "autoAttachChildProcesses": false,
             // "stopOnEntry": false,
             "sourceMaps": true,
             "outFiles": [
@@ -69,7 +69,7 @@
                 "--extensionDevelopmentPath=${workspaceRoot}",
                 "--trace-warnings"
             ],
-            "autoAttachChildProcesses": true,
+            "autoAttachChildProcesses": false,
             // "stopOnEntry": false,
             "sourceMaps": true,
             "outFiles": [

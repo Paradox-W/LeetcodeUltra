@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 import { KeyVariable } from "./AiVariableAnalyzer";
+import { GridMarker, GridRow } from "../debugVisualizer/VisualizationData";
+import { buildArrayGridVisualization, buildPreviewGridVisualization } from "../debugVisualizer/buildGridVisualization";
+import { normalizeVisualizationData, parseDebuggerJsonValue, parseVisualizationData } from "../debugVisualizer/parseVisualizationData";
 
 export interface VisualNode {
   id: string;
@@ -14,11 +17,14 @@ export interface VisualEdge {
 }
 
 export interface VisualPayload {
-  kind: { array?: boolean; list?: boolean; graph?: boolean; object?: boolean; text?: boolean };
+  kind: { array?: boolean; list?: boolean; graph?: boolean; object?: boolean; text?: boolean; grid?: boolean; error?: boolean };
   values?: Array<{ name: string; value: string; type?: string }>;
   nodes?: VisualNode[];
   edges?: VisualEdge[];
+  rows?: GridRow[];
+  markers?: GridMarker[];
   text?: string;
+  warnings?: string[];
 }
 
 export interface CollectedVariable {
@@ -185,23 +191,7 @@ function parseCppPairPreview(value: any): { key: string; value: string } | undef
 }
 
 function parseDebuggerJsonResult(value: any): any | undefined {
-  const raw = String(value === undefined || value === null ? "" : value).trim();
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "string") {
-      try {
-        return JSON.parse(parsed);
-      } catch (_) {
-        return parsed;
-      }
-    }
-    return parsed;
-  } catch (_) {
-    return undefined;
-  }
+  return parseDebuggerJsonValue(value);
 }
 
 export class DapVariableCollector {
@@ -244,7 +234,10 @@ export class DapVariableCollector {
           ? await this.getChildren(session, evaluated.variablesReference, 0, pageSize)
           : [];
         const typeHint = `${variable.type || ""} ${variable.name || ""}`.toLowerCase();
-        let jsonValue = await this.evaluateJsonValue(session, expression, frameId, options.language);
+        let jsonValue = parseDebuggerJsonResult(evaluated.result);
+        if (jsonValue === undefined) {
+          jsonValue = this.parseVisualizationDataChild(children) || await this.evaluateJsonValue(session, expression, frameId, options.language);
+        }
         let preferredVisual: VisualPayload | undefined;
         if (/javascript|typescript|js|ts/i.test(options.language || "") && /listnode|linked|head/.test(typeHint)) {
           const listValue = await this.evaluateJsListValue(session, expression, frameId);
@@ -273,7 +266,7 @@ export class DapVariableCollector {
           value: String(evaluated.result === undefined ? "" : evaluated.result),
           variablesReference: Number(evaluated.variablesReference || 0),
           presentationHint: evaluated.presentationHint,
-          visual: await this.toVisualPayload(session, variable, evaluated, children, jsonValue, preferredVisual),
+          visual: await this.toVisualPayload(session, variable, evaluated, children, jsonValue, preferredVisual, options.language),
         });
       } catch (_) {
         warnings.push(`跳过 ${expression}：当前栈帧不可求值。`);
@@ -350,11 +343,16 @@ export class DapVariableCollector {
     evaluated: any,
     children: DapVariable[],
     jsonValue?: any,
-    preferredVisual?: VisualPayload
+    preferredVisual?: VisualPayload,
+    language?: string
   ): Promise<VisualPayload> {
     const typeText = `${keyVariable.type || ""} ${evaluated.type || ""} ${keyVariable.name || ""}`.toLowerCase();
     if (preferredVisual) {
       return preferredVisual;
+    }
+    const fromJson = this.toVisualPayloadFromJson(typeText, jsonValue);
+    if (fromJson && (fromJson.kind.grid || fromJson.kind.error)) {
+      return fromJson;
     }
     if (isCppStringType(typeText)) {
       return { kind: { text: true }, text: stripCppStringQuotes(evaluated.result) };
@@ -367,14 +365,13 @@ export class DapVariableCollector {
     }
     const indexedChildren = children.filter((child) => isIndexName(child.name));
     if (indexedChildren.length && (indexedChildren.length === children.length || /\b(array|vector)\b|std::(?:array|vector)|\[[^\]]*\]/i.test(`${typeText} ${evaluated.result || ""}`))) {
-      return {
-        kind: { array: true },
-        values: indexedChildren.map((child) => ({
-          name: normalizeChildName(child.name),
-          value: valuePreview(child.value),
-          type: child.type,
-        })),
-      };
+      if (isCppLanguage(language)) {
+        const grid = buildArrayGridVisualization(indexedChildren, boundedConfigNumber("aiDebug.childPageSize", 100, 10, 500));
+        if (grid) {
+          return grid;
+        }
+      }
+      return this.buildArrayVisual(indexedChildren);
     }
     if (isCppSetType(typeText) || isCppSequentialType(typeText)) {
       const sequenceVisual = this.buildCppSequenceVisual(children, evaluated.result);
@@ -382,7 +379,6 @@ export class DapVariableCollector {
         return sequenceVisual;
       }
     }
-    const fromJson = this.toVisualPayloadFromJson(typeText, jsonValue);
     if (fromJson && (fromJson.kind.list || fromJson.kind.graph)) {
       if (!fromJson.kind.graph || (fromJson.edges && fromJson.edges.length)) {
         return fromJson;
@@ -442,6 +438,30 @@ export class DapVariableCollector {
     } catch (_) {
       return undefined;
     }
+  }
+
+  private parseVisualizationDataChild(children: DapVariable[]): any | undefined {
+    for (const child of children) {
+      if (!/^(data|_?data_|__data|_M_dataplus|__r_|__value_)$/i.test(String(child.name || ""))) {
+        continue;
+      }
+      const parsed = parseDebuggerJsonResult(child.value);
+      if (parsed !== undefined) {
+        return parsed;
+      }
+    }
+    return undefined;
+  }
+
+  private buildArrayVisual(children: DapVariable[]): VisualPayload {
+    return {
+      kind: { array: true },
+      values: children.map((child) => ({
+        name: normalizeChildName(child.name),
+        value: valuePreview(child.value),
+        type: child.type,
+      })),
+    };
   }
 
   private async evaluateJsListValue(session: vscode.DebugSession, expression: string, frameId: number): Promise<any | undefined> {
@@ -614,24 +634,11 @@ export class DapVariableCollector {
     const pageSize = boundedConfigNumber("aiDebug.childPageSize", 100, 10, 500);
     const indexedChildren = children.filter((child) => isIndexName(child.name));
     if (indexedChildren.length) {
-      return {
-        kind: { array: true },
-        values: indexedChildren.slice(0, pageSize).map((child, index) => ({
-          name: isIndexName(child.name) ? normalizeChildName(child.name) : String(index),
-          value: valuePreview(child.value),
-          type: child.type,
-        })),
-      };
+      return buildArrayGridVisualization(indexedChildren, pageSize);
     }
     const items = splitCppPreviewItems(preview);
     if (items.length > 1 || /^\{/.test(String(preview || "").trim())) {
-      return {
-        kind: { array: true },
-        values: items.slice(0, pageSize).map((item, index) => ({
-          name: String(index),
-          value: valuePreview(item),
-        })),
-      };
+      return buildPreviewGridVisualization(items, pageSize);
     }
     return undefined;
   }
@@ -703,6 +710,22 @@ export class DapVariableCollector {
   private toVisualPayloadFromJson(typeText: string, value: any): VisualPayload | undefined {
     if (value === undefined) {
       return undefined;
+    }
+    const visualization = normalizeVisualizationData(value) || parseVisualizationData(value);
+    if (visualization) {
+      if ("grid" in visualization.kind) {
+        const grid = visualization as any;
+        return {
+          kind: { grid: true },
+          rows: grid.rows,
+          markers: grid.markers,
+          warnings: grid.warnings,
+        };
+      }
+      const text = visualization as any;
+      return "error" in visualization.kind
+        ? { kind: { error: true }, text: text.text, warnings: text.warnings }
+        : { kind: { text: true }, text: text.text, warnings: text.warnings };
     }
     if (Array.isArray(value)) {
       return {

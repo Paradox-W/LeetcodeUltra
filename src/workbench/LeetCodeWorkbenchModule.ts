@@ -470,6 +470,59 @@ class LeetCodeWorkbenchProvider {
         const data = this.getResultData(this.currentResult);
         const sys = data.system_message || this.currentResult.submitEvent || {};
         this.ensureActivityLoaded(this.currentResult.action === "submit" || sys.sub_type === "submit");
+        if (this.currentResult.action === "debug" || this.currentResult.runMode === "debug") {
+            this.scheduleDebugVisualRefresh();
+        }
+    }
+    scheduleDebugVisualRefresh() {
+        [450, 1300].forEach((delay) => {
+            setTimeout(() => {
+                this.refreshDebugVisual().then(undefined, () => undefined);
+            }, delay);
+        });
+    }
+    async refreshDebugVisual() {
+        if (!this.currentResult) {
+            this.currentResult = {
+                phase: "complete",
+                action: "debug",
+                runMode: "debug",
+                receivedAt: Date.now(),
+                result: {
+                    messages: ["Debug Visualizer"],
+                },
+            };
+        }
+        const nextResult = Object.assign({}, this.currentResult, {
+            debugVisualLoading: true,
+        });
+        this.currentResult = nextResult;
+        this.currentState = this.readState();
+        this.postState();
+        try {
+            const model = await vscode.commands.executeCommand("lcpr.debugVisualizer.collect");
+            this.currentResult = Object.assign({}, this.currentResult, {
+                debugVisual: model,
+                debugVisualLoading: false,
+                debugVisualUpdatedAt: Date.now(),
+            });
+        }
+        catch (error) {
+            this.currentResult = Object.assign({}, this.currentResult, {
+                debugVisual: {
+                    title: "Debug Visualizer",
+                    status: "采集失败",
+                    variables: [],
+                    warnings: [String((error === null || error === void 0 ? void 0 : error.message) || error || "无法采集调试变量。")],
+                    updatedAt: Date.now(),
+                    canRefresh: true,
+                },
+                debugVisualLoading: false,
+                debugVisualUpdatedAt: Date.now(),
+            });
+        }
+        this.currentState = this.readState();
+        this.postState();
     }
     getResultData(payload) {
         return (payload && payload.result) || payload || {};
@@ -510,6 +563,9 @@ class LeetCodeWorkbenchProvider {
                 await this.context.workspaceState.update(this.aiDebugEnabledKey, this.aiDebugEnabled);
                 this.currentState = this.readState();
                 this.postState();
+                break;
+            case "refreshDebugVisual":
+                await this.refreshDebugVisual();
                 break;
             case "action":
                 await this.runAction(message.action, message.testCase, { enableAiDebug: !!message.enableAiDebug });
@@ -1399,6 +1455,348 @@ class LeetCodeWorkbenchProvider {
       gap: 4px;
       margin-top: 7px;
     }
+    .debug-visual {
+      margin-top: 0;
+      padding: 10px;
+      border: 2px solid color-mix(in srgb, var(--lcpr-workbench-border) 82%, var(--lcpr-workbench-muted) 18%);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--vscode-editor-background, var(--lcpr-workbench-bg)) 92%, var(--lcpr-workbench-input) 8%);
+    }
+    .debug-visual-warnings {
+      display: grid;
+      gap: 4px;
+      margin-top: 5px;
+      color: var(--vscode-editorWarning-foreground, var(--lcpr-workbench-muted));
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    .debug-visual-vars {
+      display: grid;
+      gap: 10px;
+    }
+    .debug-var {
+      min-width: 0;
+      padding: 16px 18px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+    }
+    .debug-var-layout {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+    .debug-var-figure {
+      min-width: 0;
+      overflow: visible;
+    }
+    .debug-var-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 22px;
+      align-items: start;
+      min-width: 0;
+    }
+    .debug-var-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 9px 14px;
+      margin-bottom: 8px;
+    }
+    .debug-var-name {
+      min-width: 0;
+      color: var(--lcpr-workbench-fg);
+      font-weight: 700;
+      font-size: 32px;
+      letter-spacing: .02em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debug-var-meta {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .debug-var-pill {
+      max-width: min(360px, 50vw);
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      color: var(--lcpr-workbench-muted);
+      background: transparent;
+      font: 20px var(--vscode-editor-font-family);
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debug-visual-footer {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid color-mix(in srgb, var(--lcpr-workbench-border) 66%, transparent);
+      min-width: 0;
+    }
+    .debug-source {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--lcpr-workbench-muted);
+      font-size: 10px;
+      min-width: 0;
+    }
+    .debug-source strong {
+      flex: 0 0 auto;
+      color: var(--lcpr-workbench-muted);
+      font-weight: 500;
+    }
+    .debug-source span {
+      min-width: 0;
+      color: var(--lcpr-workbench-fg);
+      font: 10px var(--vscode-editor-font-family);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debug-marker-legend {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      min-width: 96px;
+      padding-top: 8px;
+    }
+    .debug-marker-legend-item {
+      display: grid;
+      grid-template-columns: 16px minmax(0, max-content);
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      color: var(--lcpr-workbench-fg);
+      font: 20px var(--vscode-editor-font-family);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .debug-legend-marker {
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 14px solid currentColor;
+    }
+    .debug-array {
+      display: grid;
+      grid-template-columns: repeat(var(--debug-cell-count, 1), minmax(76px, 1fr));
+      width: 100%;
+      min-width: max-content;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 30px;
+    }
+    .debug-grid {
+      display: grid;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 34px 0 30px;
+    }
+    .debug-grid-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      min-width: 0;
+    }
+    .debug-grid-row.no-label {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .debug-grid-label {
+      flex: 0 0 auto;
+      min-width: 28px;
+      padding-top: 22px;
+      color: var(--lcpr-workbench-muted);
+      font-size: 10px;
+    }
+    .debug-grid-cells {
+      display: grid;
+      grid-template-columns: repeat(var(--debug-cell-count, 1), minmax(76px, 1fr));
+      width: 100%;
+      min-width: max-content;
+      gap: 8px;
+    }
+    .debug-cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 76px;
+      min-height: 94px;
+      border: 2px solid color-mix(in srgb, #d6a117 88%, var(--vscode-editor-foreground) 12%);
+      border-radius: 16px;
+      background: var(--vscode-editor-background);
+      overflow: visible;
+      text-align: center;
+    }
+    .debug-cell.in-range {
+      background: color-mix(in srgb, #ffe08a 34%, var(--vscode-editor-background) 66%);
+    }
+    .debug-cell > strong {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 70px;
+      padding: 12px 8px;
+      color: var(--vscode-editor-foreground);
+      font: 30px var(--vscode-editor-font-family);
+      line-height: 1.15;
+    }
+    .debug-cell > span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 9px);
+      display: block;
+      padding: 0 5px;
+      color: var(--lcpr-workbench-muted);
+      border-top: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    .debug-markers {
+      position: absolute;
+      left: 50%;
+      top: -31px;
+      display: flex;
+      gap: 2px;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+    .debug-marker {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 0;
+      color: var(--vscode-button-background);
+      background: transparent;
+      overflow: visible;
+    }
+    .debug-marker::before {
+      content: none;
+    }
+    .debug-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 16px solid currentColor;
+      transform: translateX(-50%);
+    }
+    .debug-marker-text {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .debug-list {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      overflow-x: auto;
+    }
+    .debug-list-node,
+    .debug-graph-node {
+      flex: 0 0 auto;
+      min-width: 32px;
+      padding: 6px 8px;
+      border: 1px solid var(--lcpr-workbench-border);
+      border-radius: 4px;
+      color: var(--vscode-editor-foreground);
+      background: var(--vscode-editor-background);
+      font-family: var(--vscode-editor-font-family);
+      text-align: center;
+    }
+    .debug-arrow {
+      color: var(--lcpr-workbench-muted);
+    }
+    .debug-object {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: 4px;
+    }
+    .debug-object div {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+      padding: 5px 6px;
+      border: 1px solid var(--lcpr-workbench-border);
+      border-radius: 3px;
+      font: 11px var(--vscode-editor-font-family);
+    }
+    .debug-object span,
+    .debug-object strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debug-graph {
+      display: grid;
+      gap: 6px;
+    }
+    .debug-graph-nodes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .debug-edges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      color: var(--lcpr-workbench-muted);
+      font-size: 10px;
+    }
+    @media (max-width: 560px) {
+      .debug-var-body {
+        grid-template-columns: 1fr;
+      }
+      .debug-marker-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        padding-top: 0;
+      }
+      .debug-grid {
+        padding-top: 28px;
+      }
+      .debug-cell {
+        min-width: 58px;
+        min-height: 76px;
+        border-radius: 12px;
+      }
+      .debug-cell > strong {
+        min-height: 56px;
+        font-size: 22px;
+      }
+      .debug-var-name {
+        font-size: 24px;
+      }
+      .debug-var-pill,
+      .debug-marker-legend-item {
+        font-size: 14px;
+      }
+    }
     .result-diagnostics-grid.equalized .result-pre {
       height: var(--result-pre-height, auto);
       max-height: var(--result-pre-height, 160px);
@@ -1788,6 +2186,9 @@ class LeetCodeWorkbenchProvider {
         .find(Boolean) || '';
     }
     function resultSummary(payload) {
+      if (payload && (payload.action === 'debug' || payload.runMode === 'debug')) {
+        return '';
+      }
       const data = getResultData(payload);
       const sys = data.system_message || payload.submitEvent || {};
       const total = Number(sys.total || 0);
@@ -2329,6 +2730,134 @@ class LeetCodeWorkbenchProvider {
     function renderActivityStatus(tone, label, message) {
       return '<div class="result-header ' + tone + '"><span class="result-dot"></span><span>' + escapeHtml(label) + '</span></div><div class="result-body ' + tone + '"><div class="result-waiting">' + escapeHtml(message) + '</div></div>' + renderActivityTip();
     }
+    function debugMarkerName(marker) {
+      return String(marker && (marker.label || marker.id || '') || '');
+    }
+    function debugMarkerFallbackColor(marker) {
+      const key = debugMarkerName(marker).toLowerCase();
+      if (/^(left|start|begin|slow)$/.test(key)) return '#0b66d8';
+      if (/^(mid|middle)$/.test(key)) return '#d9a300';
+      if (/^(right|end|fast)$/.test(key)) return '#c40000';
+      return '#8e44ad';
+    }
+    function debugMarkerColorStyle(marker) {
+      const color = String(marker && marker.color || debugMarkerFallbackColor(marker)).replace(/[^#a-zA-Z0-9(),.%\\s-]/g, '');
+      return color ? ' style="color:' + escapeHtml(color) + '"' : '';
+    }
+    function visualMarkers(variable) {
+      const visual = variable && variable.visual;
+      if (!visual || !Array.isArray(visual.markers)) return [];
+      return visual.markers;
+    }
+    function renderDebugMarkerLegend(variable) {
+      const markers = visualMarkers(variable);
+      const seen = new Set();
+      const items = markers.filter((marker) => {
+        const name = debugMarkerName(marker);
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      });
+      if (!items.length) return '';
+      return '<aside class="debug-marker-legend">' + items.map((marker) =>
+        '<div class="debug-marker-legend-item"' + debugMarkerColorStyle(marker) + '><span class="debug-legend-marker"></span><span>' + escapeHtml(debugMarkerName(marker)) + '</span></div>'
+      ).join('') + '</aside>';
+    }
+    function renderDebugVarHeader(variable) {
+      const chips = [];
+      if (variable && variable.value) {
+        chips.push(variable.value);
+      }
+      if (variable && variable.runtimeType) {
+        chips.push(variable.runtimeType);
+      }
+      if (variable && variable.expression && variable.expression !== variable.name) {
+        chips.push(variable.expression);
+      }
+      const meta = chips.length
+        ? '<div class="debug-var-meta">' + chips.map((item) => '<span class="debug-var-pill" title="' + escapeHtml(item) + '">' + escapeHtml(item) + '</span>').join('') + '</div>'
+        : '';
+      return '<div class="debug-var-head"><div class="debug-var-name">' + escapeHtml(variable && (variable.name || variable.expression) || '') + '</div>' + meta + '</div>';
+    }
+    function renderDebugFooter(model, loading) {
+      const parts = [];
+      const status = loading ? '采集中' : (model && model.status ? model.status : '');
+      if (status) {
+        parts.push('<div class="debug-source"><strong>来源</strong><span title="' + escapeHtml(status) + '">' + escapeHtml(status) + '</span></div>');
+      }
+      if (model && Array.isArray(model.warnings) && model.warnings.length) {
+        parts.push('<div class="debug-visual-warnings">' + model.warnings.map((warning) => '<div>' + escapeHtml(warning) + '</div>').join('') + '</div>');
+      }
+      return parts.length ? '<div class="debug-visual-footer">' + parts.join('') + '</div>' : '';
+    }
+    function renderDebugGridPayload(visual) {
+      const rows = Array.isArray(visual.rows) ? visual.rows : [];
+      const markers = Array.isArray(visual.markers) ? visual.markers : [];
+      return '<div class="debug-grid">' + rows.map((row, rowIndex) => {
+        const cells = Array.isArray(row.columns) ? row.columns : [];
+        const markerColumns = markers
+          .filter((marker) => Number(marker.row) === rowIndex)
+          .map((marker) => Number(marker.column))
+          .filter((column) => Number.isFinite(column));
+        const rangeStart = markerColumns.length >= 2 ? Math.min.apply(Math, markerColumns) : -1;
+        const rangeEnd = markerColumns.length >= 2 ? Math.max.apply(Math, markerColumns) : -1;
+        return '<div class="debug-grid-row' + (row.label ? '' : ' no-label') + '">' + (row.label ? '<div class="debug-grid-label">' + escapeHtml(row.label) + '</div>' : '') +
+          '<div class="debug-grid-cells" style="--debug-cell-count:' + Math.max(1, cells.length) + '">' + cells.map((cell, columnIndex) => {
+            const cellMarkers = markers.filter((marker) => Number(marker.row) === rowIndex && Number(marker.column) === columnIndex);
+            const markerHtml = cellMarkers.length
+              ? '<div class="debug-markers">' + cellMarkers.map((marker) => '<span class="debug-marker"' + debugMarkerColorStyle(marker) + ' title="' + escapeHtml(marker.label || marker.id || '') + '"><span class="debug-marker-text">' + escapeHtml(marker.label || marker.id || '') + '</span></span>').join('') + '</div>'
+              : '';
+            const rangeClass = columnIndex >= rangeStart && columnIndex <= rangeEnd ? ' in-range' : '';
+            return '<div class="debug-cell' + rangeClass + '">' + markerHtml + '<strong>' + escapeHtml(cell && cell.content || '') + '</strong><span>' + escapeHtml(cell && cell.tag || String(columnIndex)) + '</span></div>';
+          }).join('') + '</div></div>';
+      }).join('') + '</div>';
+    }
+    function renderDebugVisualPayload(variable) {
+      const visual = variable && variable.visual;
+      if (!visual || !visual.kind) return '<pre class="result-pre">' + escapeHtml(variable && (variable.value || variable.error) || '') + '</pre>';
+      if (visual.kind.grid && Array.isArray(visual.rows)) {
+        return renderDebugGridPayload(visual);
+      }
+      if (visual.kind.array && Array.isArray(visual.values)) {
+        return '<div class="debug-array" style="--debug-cell-count:' + Math.max(1, visual.values.length) + '">' + visual.values.map((item) =>
+          '<div class="debug-cell"><strong>' + escapeHtml(item.value) + '</strong><span>' + escapeHtml(item.name) + '</span></div>'
+        ).join('') + '</div>';
+      }
+      if (visual.kind.list && Array.isArray(visual.nodes)) {
+        return '<div class="debug-list">' + visual.nodes.map((node, index) =>
+          '<div class="debug-list-node">' + escapeHtml(node.value || node.label || '') + '</div>' +
+          (index < visual.nodes.length - 1 ? '<span class="debug-arrow">→</span>' : '')
+        ).join('') + '</div>';
+      }
+      if (visual.kind.graph && Array.isArray(visual.nodes)) {
+        const nodes = visual.nodes.map((node) =>
+          '<div class="debug-graph-node"><strong>' + escapeHtml(node.label || '') + '</strong><br><span>' + escapeHtml(node.value || '') + '</span></div>'
+        ).join('');
+        const edges = Array.isArray(visual.edges) && visual.edges.length
+          ? '<div class="debug-edges">' + visual.edges.map((edge) => '<span>' + escapeHtml(edge.from) + ' → ' + escapeHtml(edge.to) + (edge.label ? ' · ' + escapeHtml(edge.label) : '') + '</span>').join('') + '</div>'
+          : '';
+        return '<div class="debug-graph"><div class="debug-graph-nodes">' + nodes + '</div>' + edges + '</div>';
+      }
+      if (visual.kind.object && Array.isArray(visual.values)) {
+        return '<div class="debug-object">' + visual.values.map((item) =>
+          '<div><span>' + escapeHtml(item.name) + '</span><strong>' + escapeHtml(item.value) + '</strong></div>'
+        ).join('') + '</div>';
+      }
+      return '<pre class="result-pre">' + escapeHtml(visual.text || variable.value || variable.error || '') + '</pre>';
+    }
+    function renderDebugVisual(payload) {
+      const isDebug = payload && (payload.action === 'debug' || payload.runMode === 'debug');
+      if (!isDebug) return '';
+      const model = payload.debugVisual;
+      const loading = !!payload.debugVisualLoading;
+      const variables = model && Array.isArray(model.variables) ? model.variables : [];
+      const body = variables.length
+        ? '<div class="debug-visual-vars">' + variables.map((variable) =>
+          '<article class="debug-var"><div class="debug-var-layout">' + renderDebugVarHeader(variable) + '<div class="debug-var-body"><div class="debug-var-figure">' + renderDebugVisualPayload(variable) + '</div>' + renderDebugMarkerLegend(variable) + '</div></div></article>'
+        ).join('') + renderDebugFooter(model, loading) + '</div>'
+        : '<div class="result-waiting">' + (loading ? '正在从当前暂停栈帧采集数组和容器。' : '调试器暂停后会自动显示一维数组、vector 和可计算位置的指针/迭代器。') + '</div>';
+      return '<section class="debug-visual">' + body + '</section>';
+    }
     function renderResult() {
       const payload = state.result;
       if (!payload) {
@@ -2345,7 +2874,8 @@ class LeetCodeWorkbenchProvider {
         resultEl.innerHTML = renderActivityStatus('tone-running', '运行', waitingText);
         return;
       }
-      resultEl.innerHTML = '<div class="result-body ' + tone + '">' + resultSummary(payload) + summaryLines(payload) + renderPerformanceCharts(payload) + diagnostics(payload) + '</div>';
+      const isDebug = payload && (payload.action === 'debug' || payload.runMode === 'debug');
+      resultEl.innerHTML = '<div class="result-body ' + tone + '">' + (isDebug ? '' : resultSummary(payload) + summaryLines(payload) + renderPerformanceCharts(payload) + diagnostics(payload)) + renderDebugVisual(payload) + '</div>';
     }
     function icon(name) {
       const icons = {
@@ -2553,6 +3083,7 @@ function registerLeetCodeWorkbench(context, baba, babaStr) {
         vscode.workspace.onDidSaveTextDocument((document) => provider.handleSavedDocument(document)),
         vscode.commands.registerCommand("lcpr.workbench.refresh", () => provider.refreshOfficialCases()),
         vscode.commands.registerCommand("lcpr.workbench.showResult", (payload) => provider.showResult(payload)),
+        vscode.commands.registerCommand("lcpr.workbench.refreshDebugVisual", () => provider.refreshDebugVisual()),
         vscode.commands.registerCommand("lcpr.workbench.case", () => provider.runAction("case")),
         vscode.commands.registerCommand("lcpr.workbench.allcase", () => provider.runAction("allcase")),
         vscode.commands.registerCommand("lcpr.workbench.debug", () => provider.runAction("debug")),

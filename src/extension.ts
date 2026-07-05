@@ -36,6 +36,7 @@ import { companionService, registerLeetCodeCompanion } from "./companion/Compani
 import { registerLeetCodeFolding } from "./workbench/LeetCodeFoldingModule";
 import { registerProblemListDisplayOptions } from "./workbench/ProblemListDisplayModule";
 import { registerAiDebug } from "./aiDebug/AiDebugModule";
+import { registerDebugVisualizer } from "./debugVisualizer/DebugVisualizerModule";
 import { treeViewController } from "./controller/TreeViewController";
 
 //==================================BABA========================================
@@ -48,6 +49,21 @@ import { treeViewController } from "./controller/TreeViewController";
 
 let lcpr_timer_sec;
 let lcpr_timer_min;
+
+function runStartupTaskInBackground(name: string, task: () => Promise<void>, delayMs: number = 1500): void {
+  setTimeout(() => {
+    task().catch((error) => {
+      const message = error instanceof Error ? error.stack || error.message : String(error);
+      try {
+        BABA.getProxy(BabaStr.LogOutputProxy).get_log().appendLine(`[startup:${name}] ${message}`);
+      } catch (_) {
+        // The output proxy may be unavailable if startup failed very early.
+      }
+      ShowMessage(`${name} 初始化失败. 请查看控制台信息~`, OutPutType.error);
+    });
+  }, delayMs);
+}
+
 export async function activate(context: ExtensionContext): Promise<void> {
   try {
     BABA.init([
@@ -96,6 +112,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
       registerLeetCodeFolding(context),
       registerProblemListDisplayOptions(context, treeDataService),
       registerAiDebug(context),
+      registerDebugVisualizer(context),
       workspace.onDidOpenTextDocument((document) => treeViewController.ensureCppIntelliSenseForDocument(document)),
       window.onDidChangeActiveTextEditor((editor) => {
         if (editor) {
@@ -264,7 +281,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
     await BABA.sendNotificationAsync(BabaStr.InitFile, context);
     await BABA.sendNotificationAsync(BabaStr.InitEnv, context);
     await BABA.sendNotificationAsync(BabaStr.InitLoginStatus);
-    await BABA.sendNotificationAsync(BabaStr.StartReadData);
+    runStartupTaskInBackground("StartReadData", () => BABA.sendNotificationAsync(BabaStr.StartReadData));
   } catch (error) {
     BABA.getProxy(BabaStr.LogOutputProxy).get_log().appendLine(error.toString());
     ShowMessage("Extension initialization failed. Please open output channel for details.", OutPutType.error);

@@ -102,7 +102,15 @@ const fakeCppSession = {
     }
     if (command === "evaluate") {
       const table = {
+        nums1: { result: "std::vector of length 2", type: "std::vector<int>", variablesReference: 510 },
+        nums2: { result: "std::vector of length 1", type: "std::vector<int>", variablesReference: 520 },
+        k: { result: "2", type: "int", variablesReference: 0 },
         nums: { result: "std::vector of length 3", type: "std::vector<int>", variablesReference: 500 },
+        visNums: {
+          result: 'std::string = "{\\"kind\\":{\\"grid\\":true},\\"rows\\":[{\\"columns\\":[{\\"content\\":\\"4\\",\\"tag\\":\\"0\\"},{\\"content\\":\\"5\\",\\"tag\\":\\"1\\"},{\\"content\\":\\"6\\",\\"tag\\":\\"2\\"}]}],\\"markers\\":[{\\"row\\":0,\\"column\\":1,\\"label\\":\\"it\\",\\"color\\":\\"#d73a49\\"}]}"',
+          type: "std::string",
+          variablesReference: 0,
+        },
         word: { result: "\"leetcode\"", type: "std::string", variablesReference: 0 },
         freq: { result: "std::unordered_map with 2 elements", type: "std::unordered_map<int, int>", variablesReference: 600 },
         seen: { result: "std::unordered_set with 2 elements", type: "std::unordered_set<int>", variablesReference: 610 },
@@ -130,6 +138,13 @@ const fakeCppSession = {
           { name: "[0]", value: "4", type: "int", variablesReference: 0 },
           { name: "[1]", value: "5", type: "int", variablesReference: 0 },
           { name: "[2]", value: "6", type: "int", variablesReference: 0 },
+        ],
+        510: [
+          { name: "[0]", value: "1", type: "int", variablesReference: 0 },
+          { name: "[1]", value: "3", type: "int", variablesReference: 0 },
+        ],
+        520: [
+          { name: "[0]", value: "2", type: "int", variablesReference: 0 },
         ],
         600: [
           { name: "[0]", value: "{first = 1, second = 2}", type: "std::pair<const int, int>", variablesReference: 0 },
@@ -333,6 +348,13 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === "vscode") {
     return fakeVscode;
   }
+  if (request === "../utils/OutputUtils" || request.endsWith("/utils/OutputUtils")) {
+    return {
+      async ShowMessage(message) {
+        infoMessages.push(message);
+      },
+    };
+  }
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -418,12 +440,69 @@ function compileCppExamples() {
   }
 }
 
+async function compileInternalCppHarnessExample(LeetCodeCppHarnessGenerator, resourcesDir) {
+  const compiler = findCppCompiler();
+  if (!compiler) {
+    console.warn("Skipping internal C++ harness compilation: no clang++ or g++ found");
+    return;
+  }
+
+  const runDir = fs.mkdtempSync(path.join("/tmp", `lcpr-internal-cpp-harness-${process.pid}-`));
+  const solutionName = "solution.cpp";
+  const solutionPath = path.join(runDir, solutionName);
+  fs.cpSync(resourcesDir, runDir, { recursive: true });
+  fs.writeFileSync(solutionPath, [
+    "class Solution {",
+    "public:",
+    "  vector<int> twoSum(vector<int>& nums, int target) {",
+    "    vector<int> answer;",
+    "    for (int i = 0; i < static_cast<int>(nums.size()); ++i) {",
+    "      if (nums[i] == target) answer.push_back(i);",
+    "    }",
+    "    return answer;",
+    "  }",
+    "};",
+  ].join("\n"));
+  const generator = new LeetCodeCppHarnessGenerator(fs.readFileSync(solutionPath, "utf8"));
+  const handler = await generator.genStubCode(solutionName);
+  assert(handler && handler.includes("solution_->twoSum(nums, target)"), "internal C++ harness generator should generate the solution call");
+  fs.writeFileSync(
+    path.join(runDir, "leetcode-handler.h"),
+    handler.replace(/(#define LEETCODE_HANDLER\s*)/, '$1\n#include "leetcode-definition.h"\n'),
+  );
+  const result = childProcess.spawnSync(
+    compiler,
+    ["-std=c++17", "-Wall", "-Wextra", "-c", path.join(runDir, "leetcode-main.cpp"), "-o", path.join(runDir, "leetcode-main.o")],
+    { cwd: runDir, encoding: "utf8" },
+  );
+  try {
+    fs.rmSync(runDir, { recursive: true, force: true });
+  } catch (_error) {
+    // Best-effort cleanup only; the temp directory lives in /tmp.
+  }
+  if (result.status !== 0) {
+    throw new Error([
+      "Internal C++ harness failed to compile",
+      result.stdout,
+      result.stderr,
+    ].filter(Boolean).join("\n"));
+  }
+}
+
+function gridValues(variable) {
+  assert(variable && variable.visual && variable.visual.kind.grid, `${variable && variable.name} should be a grid visual`);
+  return variable.visual.rows[0].columns.map((column) => column.content);
+}
+
 async function main() {
   compileCppExamples();
 
   const { AiVariableAnalyzer } = require("../out/src/aiDebug/AiVariableAnalyzer");
   const { AiClient } = require("../out/src/ai/AiClient");
   const { DapVariableCollector } = require("../out/src/aiDebug/DapVariableCollector");
+  const { LeetCodeCppHarnessGenerator, leetcodeCppDebuggerResourcesDir } = require("../out/src/debug/LeetCodeCppHarnessGenerator");
+  const { storageUtils } = require("../out/src/rpc/utils/storageUtils");
+  await compileInternalCppHarnessExample(LeetCodeCppHarnessGenerator, leetcodeCppDebuggerResourcesDir());
 
   const code = [
     "// @lc app=leetcode.cn id=999 lang=javascript",
@@ -699,6 +778,7 @@ async function main() {
   fakeVscode.debug.activeDebugSession = fakeCppSession;
   const cppCollected = await collector.collect([
     { name: "nums", expression: "nums", type: "vector<int>" },
+    { name: "visNums", expression: "visNums", type: "string" },
     { name: "word", expression: "word", type: "string" },
     { name: "freq", expression: "freq", type: "unordered_map<int,int>" },
     { name: "seen", expression: "seen", type: "unordered_set<int>" },
@@ -712,26 +792,22 @@ async function main() {
   ], { language: "cpp" });
   assert.deepStrictEqual(cppCollected.warnings, []);
   const cppByName = new Map(cppCollected.variables.map((variable) => [variable.name, variable]));
-  assert.strictEqual(cppByName.get("nums").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("nums").visual.values.map((item) => item.value), ["4", "5", "6"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("nums")), ["4", "5", "6"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("visNums")), ["4", "5", "6"]);
+  assert.strictEqual(cppByName.get("visNums").visual.markers[0].label, "it");
+  assert.strictEqual(cppByName.get("visNums").visual.markers[0].column, 1);
   assert.strictEqual(cppByName.get("word").visual.kind.text, true);
   assert.strictEqual(cppByName.get("word").visual.text, "leetcode");
   assert.strictEqual(cppByName.get("freq").visual.kind.object, true);
   assert.deepStrictEqual(cppByName.get("freq").visual.values.map((item) => `${item.name}:${item.value}`), ["1:2", "3:4"]);
-  assert.strictEqual(cppByName.get("seen").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("seen").visual.values.map((item) => item.value), ["7", "9"]);
-  assert.strictEqual(cppByName.get("st").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("st").visual.values.map((item) => item.value), ["3", "2", "1"]);
-  assert.strictEqual(cppByName.get("q").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("q").visual.values.map((item) => item.value), ["1", "2", "3"]);
-  assert.strictEqual(cppByName.get("window").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("window").visual.values.map((item) => item.value), ["11", "12", "13"]);
-  assert.strictEqual(cppByName.get("linkedValues").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("linkedValues").visual.values.map((item) => item.value), ["8", "9", "10"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("seen")), ["7", "9"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("st")), ["3", "2", "1"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("q")), ["1", "2", "3"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("window")), ["11", "12", "13"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("linkedValues")), ["8", "9", "10"]);
   assert.strictEqual(cppByName.get("ordered").visual.kind.object, true);
   assert.deepStrictEqual(cppByName.get("ordered").visual.values.map((item) => `${item.name}:${item.value}`), ["2:20", "4:40"]);
-  assert.strictEqual(cppByName.get("heap").visual.kind.array, true);
-  assert.deepStrictEqual(cppByName.get("heap").visual.values.map((item) => item.value), ["9", "5", "1"]);
+  assert.deepStrictEqual(gridValues(cppByName.get("heap")), ["9", "5", "1"]);
   assert.strictEqual(cppByName.get("head").visual.kind.list, true);
   assert.deepStrictEqual(cppByName.get("head").visual.nodes.map((node) => node.value), ["1", "2"]);
   fakeVscode.debug.activeDebugSession = fakeSession;
@@ -797,6 +873,7 @@ async function main() {
         status: "已捕获调试变量",
         variables: [
           { name: "arr", expression: "arr", value: "[1,2]", visual: { kind: { array: true }, values: [{ name: "0", value: "1" }, { name: "1", value: "2" }] } },
+          { name: "grid", expression: "vis", value: "std::string", visual: { kind: { grid: true }, rows: [{ columns: [{ content: "4", tag: "0" }, { content: "5", tag: "1" }] }], markers: [{ row: 0, column: 1, label: "it" }] } },
           { name: "list", expression: "head", value: "ListNode", visual: { kind: { list: true }, nodes: [{ id: "n0", label: "0", value: "1" }, { id: "n1", label: "1", value: "2" }] } },
           { name: "tree", expression: "root", value: "TreeNode", visual: { kind: { graph: true }, nodes: [{ id: "root", label: "root", value: "2" }, { id: "left", label: "left", value: "1" }], edges: [{ from: "root", to: "left", label: "left" }] } },
           { name: "obj", expression: "freq", value: "Object", visual: { kind: { object: true }, values: [{ name: "x", value: "3" }] } },
@@ -809,6 +886,8 @@ async function main() {
     },
   });
   assert(renderer.app.innerHTML.includes('class="object"'), "webview renderer should render object visuals from posted models");
+  assert(renderer.app.innerHTML.includes('class="dv-grid"'), "webview renderer should render grid visuals from posted models");
+  assert(renderer.app.innerHTML.includes(">it</span>"), "webview renderer should render grid markers");
   assert(renderer.app.innerHTML.includes("<pre>abc</pre>"), "webview renderer should render text visuals from posted models");
   await fakeVscode.commands.executeCommand("lcpr.aiDebug.refresh");
   assert(webviewMessages.some((message) => message && message.command === "render" && message.model && message.model.variables.length > 0), "refresh should send render JSON to the webview");
@@ -833,6 +912,38 @@ async function main() {
   assert.strictEqual(runningModel.variables.length, 0, "collect command should wait for a paused frame before collecting variables");
   assert(runningModel.warnings.some((warning) => /调试会话正在运行/.test(warning)), "running debugger should produce a friendly pause warning");
   fakeVscode.debug.activeDebugSession = fakeSession;
+
+  const noCommentDir = fs.mkdtempSync(path.join("/tmp", "lcpr-ai-debug-no-comment-"));
+  const noCommentFile = path.join(noCommentDir, "4-median-of-two-sorted-arrays.cpp");
+  fs.writeFileSync(noCommentFile, [
+    "class Solution {",
+    "public:",
+    "  int getKthElement(const vector<int>& nums1, const vector<int>& nums2, int k) {",
+    "    int index1 = 0, index2 = 0;",
+    "    return nums1[index1] + nums2[index2] + k;",
+    "  }",
+    "};",
+  ].join("\n"));
+  storageUtils.writeProblemMeta(noCommentFile, { app: "leetcode.cn", id: "4", lang: "cpp" });
+  activeDocument = {
+    uri: { toString: () => `file://${noCommentFile}`, scheme: "file" },
+    languageId: "cpp",
+    fileName: noCommentFile,
+    getText: () => fs.readFileSync(noCommentFile, "utf8"),
+  };
+  fakeVscode.window.activeTextEditor = { document: activeDocument };
+  fakeVscode.window.visibleTextEditors = [{ document: activeDocument }];
+  fakeVscode.debug.activeDebugSession = fakeCppSession;
+  const noCommentModel = await fakeVscode.commands.executeCommand("lcpr.aiDebug.collect");
+  assert.notStrictEqual(noCommentModel.status, "未打开力扣代码文件", "sidecar metadata should make no-comment C++ files eligible for AI debug");
+  assert.strictEqual(noCommentModel.analysis.language, "cpp", "sidecar metadata should provide the C++ language");
+  assert.strictEqual(noCommentModel.analysis.problemId, "4", "sidecar metadata should provide the problem id");
+  assert(noCommentModel.variables.some((variable) => variable.name === "nums1"), "no-comment C++ collect should include nums1");
+  assert(noCommentModel.variables.some((variable) => variable.name === "nums2"), "no-comment C++ collect should include nums2");
+  fakeVscode.debug.activeDebugSession = fakeSession;
+  activeDocument = document;
+  fakeVscode.window.activeTextEditor = { document: activeDocument };
+  fakeVscode.window.visibleTextEditors = [{ document: activeDocument }];
 
   await fakeVscode.commands.executeCommand("lcpr.aiDebug.toggleAiAnalysis");
   assert.strictEqual(fakeConfig["aiDebug.enableAiAnalysis"], true, "toggle should enable AI analysis");

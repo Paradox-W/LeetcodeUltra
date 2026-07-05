@@ -4,8 +4,8 @@ import * as vscode from "vscode";
 import * as fse from "fs-extra";
 import { ShowMessage } from "../utils/OutputUtils";
 import { OutPutType } from "../model/ConstDefind";
+import { LeetCodeCppHarnessGenerator, leetcodeCppDebuggerResourcesDir } from "./LeetCodeCppHarnessGenerator";
 
-const DEBUG_COMMAND = "leetcode-cpp-debugger.debug";
 const INPUT_FILE_NAME = "test_case.txt";
 const DEBUG_BINARY_NAME = ".vscode-cpp-debug";
 const LINE_DIRECTIVE_MARKER = "// @lcpr-cpp-debug-disabled-line ";
@@ -27,7 +27,9 @@ const CPP_DEBUG_DEFINITION = [
   "#include <deque>",
   "#include <functional>",
   "#include <iomanip>",
+  "#include <initializer_list>",
   "#include <iostream>",
+  "#include <iterator>",
   "#include <limits>",
   "#include <list>",
   "#include <map>",
@@ -104,6 +106,147 @@ const CPP_DEBUG_DEFINITION = [
   "int guess(int num);",
   "bool knows(int a, int b);",
   "",
+  "namespace dbgvis {",
+  "struct Marker {",
+  "    std::string id;",
+  "    std::size_t row;",
+  "    std::size_t column;",
+  "    std::size_t rows;",
+  "    std::size_t columns;",
+  "    std::string label;",
+  "    std::string color;",
+  "};",
+  "namespace detail {",
+  "inline std::string json_escape(const std::string& value) {",
+  "    std::string out;",
+  "    out.reserve(value.size() + 8);",
+  "    for (char ch : value) {",
+  "        switch (ch) {",
+  "        case '\\\\': out += \"\\\\\\\\\"; break;",
+  "        case '\"': out += \"\\\\\\\"\"; break;",
+  "        case '\\n': out += \"\\\\n\"; break;",
+  "        case '\\r': out += \"\\\\r\"; break;",
+  "        case '\\t': out += \"\\\\t\"; break;",
+  "        default: out += ch; break;",
+  "        }",
+  "    }",
+  "    return out;",
+  "}",
+  "template <typename T>",
+  "std::string to_string(const T& value) {",
+  "    std::ostringstream stream;",
+  "    stream << value;",
+  "    return stream.str();",
+  "}",
+  "inline void write_marker(std::ostringstream& json, const Marker& marker) {",
+  "    json << \"{\\\"id\\\":\\\"\" << json_escape(marker.id) << \"\\\"\"",
+  "         << \",\\\"row\\\":\" << marker.row",
+  "         << \",\\\"column\\\":\" << marker.column;",
+  "    if (marker.rows > 1) {",
+  "        json << \",\\\"rows\\\":\" << marker.rows;",
+  "    }",
+  "    if (marker.columns > 1) {",
+  "        json << \",\\\"columns\\\":\" << marker.columns;",
+  "    }",
+  "    if (!marker.label.empty()) {",
+  "        json << \",\\\"label\\\":\\\"\" << json_escape(marker.label) << \"\\\"\";",
+  "    }",
+  "    if (!marker.color.empty()) {",
+  "        json << \",\\\"color\\\":\\\"\" << json_escape(marker.color) << \"\\\"\";",
+  "    }",
+  "    json << \"}\";",
+  "}",
+  "template <typename Iterator>",
+  "std::string array_from_iterators(Iterator first, Iterator last, std::initializer_list<Marker> markers = {}) {",
+  "    std::ostringstream json;",
+  "    json << \"{\\\"kind\\\":{\\\"grid\\\":true},\\\"rows\\\":[{\\\"columns\\\":[\";",
+  "    std::size_t index = 0;",
+  "    for (Iterator it = first; it != last; ++it, ++index) {",
+  "        if (index > 0) {",
+  "            json << \",\";",
+  "        }",
+  "        json << \"{\\\"content\\\":\\\"\" << json_escape(to_string(*it)) << \"\\\",\\\"tag\\\":\\\"\" << index << \"\\\"}\";",
+  "    }",
+  "    json << \"]}]\";",
+  "    if (markers.size() > 0) {",
+  "        json << \",\\\"markers\\\":[\";",
+  "        std::size_t markerIndex = 0;",
+  "        for (std::initializer_list<Marker>::const_iterator it = markers.begin(); it != markers.end(); ++it, ++markerIndex) {",
+  "            if (markerIndex > 0) {",
+  "                json << \",\";",
+  "            }",
+  "            write_marker(json, *it);",
+  "        }",
+  "        json << \"]\";",
+  "    }",
+  "    json << \"}\";",
+  "    return json.str();",
+  "}",
+  "inline std::string error_text(const std::string& message) {",
+  "    return \"{\\\"kind\\\":{\\\"text\\\":true},\\\"text\\\":\\\"\" + json_escape(message) + \"\\\"}\";",
+  "}",
+  "} // namespace detail",
+  "inline Marker marker(std::size_t index, const std::string& label = \"\", const std::string& color = \"\") {",
+  "    Marker result;",
+  "    result.id = label.empty() ? detail::to_string(index) : label;",
+  "    result.row = 0;",
+  "    result.column = index;",
+  "    result.rows = 1;",
+  "    result.columns = 1;",
+  "    result.label = label;",
+  "    result.color = color;",
+  "    return result;",
+  "}",
+  "inline Marker range(std::size_t start, std::size_t count, const std::string& label = \"\", const std::string& color = \"\") {",
+  "    Marker result = marker(start, label, color);",
+  "    result.id = label.empty() ? (\"range-\" + detail::to_string(start)) : label;",
+  "    result.columns = count == 0 ? 1 : count;",
+  "    return result;",
+  "}",
+  "template <typename Iterator>",
+  "Marker marker_at(Iterator first, Iterator it, const std::string& label = \"\", const std::string& color = \"\") {",
+  "    return marker(static_cast<std::size_t>(std::distance(first, it)), label, color);",
+  "}",
+  "template <typename Iterator>",
+  "Marker range_at(Iterator first, Iterator rangeFirst, Iterator rangeLast, const std::string& label = \"\", const std::string& color = \"\") {",
+  "    return range(static_cast<std::size_t>(std::distance(first, rangeFirst)), static_cast<std::size_t>(std::distance(rangeFirst, rangeLast)), label, color);",
+  "}",
+  "template <typename Container>",
+  "std::string array(const Container& container) {",
+  "    using std::begin;",
+  "    using std::end;",
+  "    return detail::array_from_iterators(begin(container), end(container));",
+  "}",
+  "template <typename Container>",
+  "std::string array(const Container& container, std::initializer_list<Marker> markers) {",
+  "    using std::begin;",
+  "    using std::end;",
+  "    return detail::array_from_iterators(begin(container), end(container), markers);",
+  "}",
+  "template <typename T, std::size_t N>",
+  "std::string array(const T (&items)[N]) {",
+  "    return detail::array_from_iterators(items, items + N);",
+  "}",
+  "template <typename T, std::size_t N>",
+  "std::string array(const T (&items)[N], std::initializer_list<Marker> markers) {",
+  "    return detail::array_from_iterators(items, items + N, markers);",
+  "}",
+  "template <typename T>",
+  "std::string array(const T* ptr, std::size_t count) {",
+  "    return array(ptr, count, {});",
+  "}",
+  "template <typename T>",
+  "std::string array(const T* ptr, std::size_t count, std::initializer_list<Marker> markers) {",
+  "    if (!ptr && count > 0) {",
+  "        return detail::error_text(\"dbgvis::array received a null pointer with non-zero count.\");",
+  "    }",
+  "    if (count == 0) {",
+  "        return detail::array_from_iterators(ptr, ptr, markers);",
+  "    }",
+  "    return detail::array_from_iterators(ptr, ptr + count, markers);",
+  "}",
+  "} // namespace dbgvis",
+  "",
 ].join("\n");
 
 interface CppLeetCodeDebugOptions {
@@ -127,12 +270,6 @@ class CppLeetCodePluginBridge {
   public async start(document: vscode.TextDocument, filePath: string, testCase: string, options: CppLeetCodeDebugOptions = {}): Promise<void> {
     const enableAiDebug = !!options.enableAiDebug;
     this.log(`start file=${filePath} enableAiDebug=${enableAiDebug}`);
-    const commandAvailable = await this.hasDebuggerCommand();
-    this.log(`debuggerCommandAvailable=${commandAvailable}`);
-    if (!commandAvailable) {
-      ShowMessage("未找到 LeetCode C++ Debugger 插件。请先安装 XavierCai.vscode-leetcode-cpp-debug。", OutPutType.error);
-      return;
-    }
 
     await this.prepareInputFile(filePath, testCase);
     const disabledLineDirective = await this.disableLineDirective(document);
@@ -186,20 +323,6 @@ class CppLeetCodePluginBridge {
     await this.restoreLeetCodeConsoleFocus(document);
   }
 
-  private async hasDebuggerCommand(): Promise<boolean> {
-    let commands = await vscode.commands.getCommands(true);
-    if (commands.indexOf(DEBUG_COMMAND) >= 0) {
-      return true;
-    }
-
-    const extension = this.getCppDebuggerExtension();
-    if (extension) {
-      await extension.activate();
-      commands = await vscode.commands.getCommands(true);
-    }
-    return commands.indexOf(DEBUG_COMMAND) >= 0;
-  }
-
   private async prepareInputFile(filePath: string, testCase: string): Promise<void> {
     const inputPath = path.join(path.dirname(filePath), INPUT_FILE_NAME);
     await fse.writeFile(inputPath, normalizeTestCase(testCase), "utf8");
@@ -207,7 +330,7 @@ class CppLeetCodePluginBridge {
 
   private async executeDebuggerCommand(document: vscode.TextDocument, filePath: string, entryFunctionName?: string): Promise<boolean> {
     const solutionDir = path.dirname(filePath);
-    this.log(`generate debug harness without invoking ${DEBUG_COMMAND}`);
+    this.log("generate debug harness from internal LeetcodeUltra source");
     await this.generateDebugHarness(document, filePath);
     await this.patchGeneratedMainInput(filePath);
     await this.restoreLeetCodeConsoleFocus(document);
@@ -216,30 +339,15 @@ class CppLeetCodePluginBridge {
     return started;
   }
 
-  private getCppDebuggerExtension(): vscode.Extension<any> | undefined {
-    return vscode.extensions.getExtension("XavierCai.vscode-leetcode-cpp-debug")
-      || vscode.extensions.getExtension("xaviercai.vscode-leetcode-cpp-debug");
-  }
-
   private async generateDebugHarness(document: vscode.TextDocument, filePath: string): Promise<void> {
-    const extension = this.getCppDebuggerExtension();
-    if (!extension) {
-      throw new Error("未找到 LeetCode C++ Debugger 插件。");
-    }
-    const extensionPath = extension.extensionPath;
     const solutionDir = path.dirname(filePath);
-    const resourcesDir = path.join(extensionPath, "resources", "code", "cpp");
+    const resourcesDir = leetcodeCppDebuggerResourcesDir();
     if (!(await fse.pathExists(resourcesDir))) {
-      throw new Error(`LeetCode C++ Debugger resources missing: ${resourcesDir}`);
-    }
-    const cppDebuggerModule = require(path.join(extensionPath, "out", "debuggers", "cppDebugger.js"));
-    const CppDebugger = cppDebuggerModule && cppDebuggerModule.CppDebugger;
-    if (!CppDebugger) {
-      throw new Error("LeetCode C++ Debugger CppDebugger module unavailable.");
+      throw new Error(`LeetcodeUltra 内置 C++ 调试资源缺失：${resourcesDir}`);
     }
     const codeTemplate = document.getText();
-    const debuggerInstance = new CppDebugger(codeTemplate, {}, {});
-    const handler = await debuggerInstance.genStubCode(path.basename(filePath));
+    const generator = new LeetCodeCppHarnessGenerator(codeTemplate);
+    const handler = await generator.genStubCode(path.basename(filePath));
     if (!handler) {
       throw new Error("无法生成 C++ 调试入口。");
     }
@@ -580,19 +688,7 @@ class CppLeetCodePluginBridge {
     if (!folder) {
       return `C++ 调试器未启动。请先用 VS Code 打开题目所在文件夹：${path.dirname(document.uri.fsPath)}`;
     }
-    const launch = vscode.workspace.getConfiguration("launch", document.uri).get<any[]>("configurations") || [];
-    if (!launch.length) {
-      return `C++ 调试器未启动。工作区 ${folder.uri.fsPath} 缺少 .vscode/launch.json 调试配置。`;
-    }
-    const tasksPath = path.join(folder.uri.fsPath, ".vscode", "tasks.json");
-    if (!(await fse.pathExists(tasksPath))) {
-      return `C++ 调试器未启动。工作区 ${folder.uri.fsPath} 缺少 .vscode/tasks.json 构建任务。`;
-    }
-    const source = vscode.workspace.getConfiguration("leetcode-cpp-debugger", document.uri).get<string>("source");
-    if (source && source !== "[offline]local") {
-      return `C++ 调试器未启动。请把 leetcode-cpp-debugger.source 设置为 [offline]local。`;
-    }
-    return "C++ 调试器未启动。已生成输入文件，但 VS Code 没有创建调试会话；请查看终端里的构建/CodeLLDB 输出。";
+    return "C++ 调试器未启动。LeetcodeUltra 已在内部生成调试入口，请确认 CodeLLDB 已安装并查看“LeetcodeUltra Debug”输出里的构建/启动日志。";
   }
 
   private log(message: string): void {

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as ts from "typescript";
 import { AiClient, stableHash } from "../ai/AiClient";
+import { fileMetaFromDocument } from "../utils/problemUtils";
 
 export interface KeyVariable {
   name: string;
@@ -153,7 +154,8 @@ export class AiVariableAnalyzer {
 
   private extractLeetCodeSource(document: vscode.TextDocument): { code: string; language: string; problemId?: string } {
     const text = document.getText();
-    const meta = text.match(/@lc app=.* id=([^\s]+) lang=([^\s]+)/);
+    const storedMeta = fileMetaFromDocument(document);
+    const commentMeta = text.match(/@lc app=.* id=([^\s]+) lang=([^\s]+)/);
     const lines = text.split(/\r?\n/);
     const codeStart = lines.findIndex((line) => line.indexOf("@lc code=start") >= 0);
     const codeEnd = lines.findIndex((line) => line.indexOf("@lc code=end") >= 0);
@@ -162,8 +164,8 @@ export class AiVariableAnalyzer {
       : text;
     return {
       code,
-      language: meta ? meta[2] : document.languageId,
-      problemId: meta ? meta[1] : undefined,
+      language: storedMeta ? storedMeta.lang : (commentMeta ? commentMeta[2] : document.languageId),
+      problemId: storedMeta ? storedMeta.id : (commentMeta ? commentMeta[1] : undefined),
     };
   }
 

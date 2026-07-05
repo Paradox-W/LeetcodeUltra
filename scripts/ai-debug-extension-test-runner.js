@@ -30,14 +30,10 @@ async function main() {
     "leetcode-problem-rating.aiDebug.maxVariables": 8,
     "leetcode-problem-rating.aiDebug.manualVariables": [],
     "leetcode-problem-rating.aiDebug.visualTheme": "dense",
-    "leetcode-cpp-debugger.source": "[offline]local",
-    "leetcode-cpp-debugger.deleteTemporaryContents": false,
-    "leetcode-cpp-debugger.outputFileEncoding": "utf8",
   }, null, 2));
 
   if (realWorkspace) {
     const requiredExtensions = [
-      "xaviercai.vscode-leetcode-cpp-debug-0.0.9",
       "vadimcn.vscode-lldb-1.12.2",
     ];
     for (const extensionName of requiredExtensions) {

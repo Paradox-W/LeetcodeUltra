@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "tests": [
+    "debug-visualizer-expression-grid"
+  ],
+  "screenshot": "/Users/paradox/Documents/LeetcodeUltra/test-artifacts/debug-visualizer-smoke.png"
+}

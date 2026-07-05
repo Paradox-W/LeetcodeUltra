@@ -154,9 +154,31 @@ export class AiDebugPanel {
         '<button data-command="refresh" disabled>刷新</button>' +
         '</section>';
     }
+    function markerStyle(marker) {
+      const color = String(marker && marker.color || '').replace(/[^#a-zA-Z0-9(),.%\\s-]/g, '');
+      return color ? ' style="border-color:' + escapeHtml(color) + ';color:' + escapeHtml(color) + '"' : '';
+    }
+    function renderGridVisual(visual) {
+      const markers = Array.isArray(visual.markers) ? visual.markers : [];
+      const rows = Array.isArray(visual.rows) ? visual.rows : [];
+      return '<div class="dv-grid">' + rows.map((row, rowIndex) => {
+        const cells = Array.isArray(row.columns) ? row.columns : [];
+        return '<div class="dv-row">' + (row.label ? '<div class="dv-row-label">' + escapeHtml(row.label) + '</div>' : '') +
+          '<div class="dv-cells">' + cells.map((cell, columnIndex) => {
+            const cellMarkers = markers.filter((marker) => Number(marker.row) === rowIndex && Number(marker.column) === columnIndex);
+            const markerHtml = cellMarkers.length
+              ? '<div class="dv-markers">' + cellMarkers.map((marker) => '<span class="dv-marker"' + markerStyle(marker) + '>' + escapeHtml(marker.label || marker.id || '') + '</span>').join('') + '</div>'
+              : '';
+            return '<div class="dv-cell">' + markerHtml + '<strong>' + escapeHtml(cell && cell.content || '') + '</strong><span>' + escapeHtml(cell && cell.tag || String(columnIndex)) + '</span></div>';
+          }).join('') + '</div></div>';
+      }).join('') + '</div>';
+    }
     function renderVisual(variable) {
       const visual = variable && variable.visual;
       if (!visual || !visual.kind) return '';
+      if (visual.kind.grid && Array.isArray(visual.rows)) {
+        return renderGridVisual(visual);
+      }
       if (visual.kind.array && Array.isArray(visual.values)) {
         return '<div class="array">' + visual.values.map((item) =>
           '<div class="cell"><span>' + escapeHtml(item.name) + '</span><strong>' + escapeHtml(item.value) + '</strong></div>'
@@ -289,6 +311,9 @@ ${model.variables.length ? `<section class="grid">${model.variables.map((variabl
     if (!visual) {
       return "";
     }
+    if (visual.kind.grid && visual.rows) {
+      return this.renderGridVisual(visual);
+    }
     if (visual.kind.array && visual.values) {
       return `<div class="array">${visual.values.map((item) => `<div class="cell"><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(item.value)}</strong></div>`).join("")}</div>`;
     }
@@ -305,6 +330,26 @@ ${model.variables.length ? `<section class="grid">${model.variables.map((variabl
       return `<div class="object">${visual.values.map((item) => `<div><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(item.value)}</strong></div>`).join("")}</div>`;
     }
     return `<pre>${escapeHtml(visual.text || variable.value || "")}</pre>`;
+  }
+
+  private renderGridVisual(visual: any): string {
+    const markers = Array.isArray(visual.markers) ? visual.markers : [];
+    const rows = Array.isArray(visual.rows) ? visual.rows : [];
+    return `<div class="dv-grid">${rows.map((row: any, rowIndex: number) => {
+      const cells = Array.isArray(row.columns) ? row.columns : [];
+      return `<div class="dv-row">${row.label ? `<div class="dv-row-label">${escapeHtml(row.label)}</div>` : ""}<div class="dv-cells">${cells.map((cell: any, columnIndex: number) => {
+        const cellMarkers = markers.filter((marker: any) => Number(marker.row) === rowIndex && Number(marker.column) === columnIndex);
+        const markerHtml = cellMarkers.length
+          ? `<div class="dv-markers">${cellMarkers.map((marker: any) => `<span class="dv-marker"${this.markerStyle(marker)}>${escapeHtml(marker.label || marker.id || "")}</span>`).join("")}</div>`
+          : "";
+        return `<div class="dv-cell">${markerHtml}<strong>${escapeHtml(cell && cell.content || "")}</strong><span>${escapeHtml(cell && cell.tag || String(columnIndex))}</span></div>`;
+      }).join("")}</div></div>`;
+    }).join("")}</div>`;
+  }
+
+  private markerStyle(marker: any): string {
+    const color = String(marker && marker.color || "").replace(/[^#a-zA-Z0-9(),.%\s-]/g, "");
+    return color ? ` style="border-color:${escapeHtml(color)};color:${escapeHtml(color)}"` : "";
   }
 
   private style(): string {
@@ -446,6 +491,75 @@ code, pre {
 }
 .array {
   grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+}
+.dv-grid {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.dv-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.dv-row-label {
+  flex: 0 0 auto;
+  min-width: 32px;
+  padding-top: 22px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.dv-cells {
+  display: flex;
+  gap: 5px;
+}
+.dv-cell {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 44px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: visible;
+  text-align: center;
+}
+.dv-cell strong {
+  display: block;
+  min-height: 30px;
+  padding: 8px 7px 4px;
+  color: var(--fg);
+  font: 12px var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+.dv-cell span {
+  display: block;
+  padding: 2px 5px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 14px;
+}
+.dv-markers {
+  position: absolute;
+  left: 50%;
+  top: -17px;
+  display: flex;
+  gap: 2px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.dv-marker {
+  max-width: 60px;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cell, .object div {
   min-width: 0;

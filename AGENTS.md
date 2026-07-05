@@ -58,6 +58,24 @@ git -C /Users/paradox/Documents/LeetcodeUltra status --short --branch
 git -C /Users/paradox/Documents/LeetcodeUltra diff --stat
 ```
 
+## VS Code Extension Debugging
+
+- Do not use macOS coordinate clicking as the primary way to debug or verify VS Code extensions. It is brittle with Retina scaling, transient welcome dialogs, focus changes, and localized UI.
+- Prefer deterministic verification first: unit tests for pure parser/helper logic, `@vscode/test-electron` integration tests for VS Code API behavior, command-line Extension Development Host launches with `--extensionDevelopmentPath`, Debug Adapter Protocol requests, extension-host logs, and CLI/compiler checks.
+- Use screenshots as final evidence, not as the main control mechanism. If UI interaction is unavoidable, prefer VS Code commands, extension tests, browser/webview automation with selectors, or direct debug-protocol operations. If manual interaction is required, say so directly.
+- For LeetcodeUltra debugger work, verify generated debug files/configuration first, verify CodeLLDB/cppdbg launch behavior second, verify webview/debug-console rendering third, then capture screenshots for proof.
+- For Debug Visualizer experiments, verify C++ helper output as JSON first, verify extension parsing/backend behavior second, then use the Extension Development Host and CodeLLDB only for final visual confirmation.
+
+Useful commands:
+
+```bash
+npm run doctor:debug
+npm run test:debug-api
+npm run test:ai-debug:extension
+npm run open:sandbox
+npm run screenshot:vscode
+```
+
 ## Editing Rules
 
 - Treat this repository as the authoritative LeetcodeUltra source state.

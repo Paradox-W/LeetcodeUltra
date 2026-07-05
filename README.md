@@ -71,7 +71,7 @@ Accepted 不只是一个绿色状态。LeetcodeUltra 会把运行时间和内存
 
 ### 5. 更顺手的 C++ 本地调试
 
-C++ 调试优先复用成熟的 [LeetCode Debugger for C++](https://github.com/xavier-cai/vscode-leetcode-cpp-debug) 生成 wrapper，再通过 CodeLLDB 启动本地调试会话。LeetcodeUltra 负责把控制台测试用例和调试输入接起来。
+C++ 调试现在由 LeetcodeUltra 内置的 harness generator 生成 wrapper，再通过 CodeLLDB 启动本地调试会话。用户不再需要额外安装 LeetCode Debugger for C++；LeetcodeUltra 会自己把控制台测试用例和调试输入接起来。
 
 - 从控制台单个用例直接启动调试。
 - 当前用例自动写入 `test_case.txt`，避免在终端重复手输。
@@ -83,18 +83,7 @@ C++ 调试优先复用成熟的 [LeetCode Debugger for C++](https://github.com/x
 
 推荐安装：
 
-- `xaviercai.vscode-leetcode-cpp-debug`
 - `vadimcn.vscode-lldb`
-
-推荐工作区配置：
-
-```json
-{
-  "leetcode-cpp-debugger.source": "[offline]local",
-  "leetcode-cpp-debugger.deleteTemporaryContents": false,
-  "leetcode-cpp-debugger.outputFileEncoding": "utf8"
-}
-```
 
 ### 6. 可选的实验性 AI 调试
 

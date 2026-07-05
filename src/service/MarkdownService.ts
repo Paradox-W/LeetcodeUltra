@@ -7,9 +7,6 @@
  * Copyright (c) 2022 ccagml . All rights reserved.
  */
 
-import * as hljs from "highlight.js";
-import * as MarkdownIt from "markdown-it";
-import * as MarkDownItKatex from "markdown-it-katex";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -17,9 +14,10 @@ import { BABA, BabaStr } from "../BABA";
 import { isWindows } from "../utils/SystemUtils";
 
 class MarkdownService implements vscode.Disposable {
-  private engine: MarkdownIt;
+  private engine: any;
   private config: MarkdownConfiguration;
   private listener: vscode.Disposable;
+  private highlighter: any;
 
   public constructor() {
     this.reload();
@@ -42,13 +40,13 @@ class MarkdownService implements vscode.Disposable {
   }
 
   public reload(): void {
-    this.engine = this.initEngine();
     this.config = new MarkdownConfiguration();
+    this.engine = undefined;
   }
 
   public render(md: string, env?: any): string {
     const normalized = this.normalizeMath(md);
-    return this.restoreMathFallbacks(this.engine.render(normalized.text, env), normalized.fallbacks);
+    return this.restoreMathFallbacks(this.getEngine().render(normalized.text, env), normalized.fallbacks);
   }
 
   public getStyles(panel: vscode.WebviewPanel | undefined): string {
@@ -85,8 +83,17 @@ class MarkdownService implements vscode.Disposable {
     ].join(os.EOL);
   }
 
-  private initEngine(): MarkdownIt {
-    const md: MarkdownIt = new MarkdownIt({
+  private getEngine(): any {
+    if (!this.engine) {
+      this.engine = this.initEngine();
+    }
+    return this.engine;
+  }
+
+  private initEngine(): any {
+    const MarkdownIt = require("markdown-it");
+    const MarkDownItKatex = require("markdown-it-katex");
+    const md: any = new MarkdownIt({
       linkify: true,
       typographer: true,
       highlight: (code: string, lang?: string): string => {
@@ -101,9 +108,10 @@ class MarkdownService implements vscode.Disposable {
             lang = "python";
             break;
         }
-        if (lang && hljs.getLanguage(lang)) {
+        const highlighter = lang ? this.getHighlighter() : undefined;
+        if (lang && highlighter && highlighter.getLanguage(lang)) {
           try {
-            return hljs.highlight(lang, code, true).value;
+            return highlighter.highlight(lang, code, true).value;
           } catch (error) {
             /* do not highlight */
           }
@@ -117,6 +125,13 @@ class MarkdownService implements vscode.Disposable {
     this.addImageUrlCompletion(md);
     this.addLinkValidator(md);
     return md;
+  }
+
+  private getHighlighter(): any {
+    if (!this.highlighter) {
+      this.highlighter = require("highlight.js");
+    }
+    return this.highlighter;
   }
 
   private normalizeMath(md: string): { text: string; fallbacks: string[] } {
@@ -248,8 +263,8 @@ class MarkdownService implements vscode.Disposable {
     return `LCPR_MATH_FALLBACK_${index}`;
   }
 
-  private addCodeBlockHighlight(md: MarkdownIt): void {
-    const codeBlock: MarkdownIt.TokenRender = md.renderer.rules["code_block"];
+  private addCodeBlockHighlight(md: any): void {
+    const codeBlock: any = md.renderer.rules["code_block"];
     // tslint:disable-next-line:typedef
     md.renderer.rules["code_block"] = (tokens, idx, options, env, self) => {
       // if any token uses lang-specified code fence, then do not highlight code block
@@ -266,8 +281,8 @@ class MarkdownService implements vscode.Disposable {
     };
   }
 
-  private addImageUrlCompletion(md: MarkdownIt): void {
-    const image: MarkdownIt.TokenRender = md.renderer.rules["image"];
+  private addImageUrlCompletion(md: any): void {
+    const image: any = md.renderer.rules["image"];
     // tslint:disable-next-line:typedef
     md.renderer.rules["image"] = (tokens, idx, options, env, self) => {
       const token: any = tokens[idx];
@@ -327,7 +342,7 @@ class MarkdownService implements vscode.Disposable {
     return this.escapeHtml(value).replace(/'/g, "&#39;");
   }
 
-  private addLinkValidator(md: MarkdownIt): void {
+  private addLinkValidator(md: any): void {
     const validateLink: (link: string) => boolean = md.validateLink;
     md.validateLink = (link: string): boolean => {
       // support file:// protocal link

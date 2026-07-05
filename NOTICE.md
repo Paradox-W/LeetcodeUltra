@@ -9,3 +9,37 @@ https://github.com/ccagml/leetcode-extension
 The MIT license and upstream attribution are preserved. LeetcodeUltra is
 published under a separate extension identity to avoid confusion with the
 upstream project.
+
+Debug Visualizer source snapshot
+--------------------------------
+
+This working branch also contains a minimal source snapshot and derived runtime
+work from Debug Visualizer:
+
+https://github.com/hediet/vscode-debug-visualizer
+
+Snapshot commit: 96c26e5388eda9ed81a488f1d95a26a9af166214
+License: GPL-3.0, preserved at vendor/debug-visualizer/LICENSE.md.
+
+The snapshot is limited to source references needed for native C++ array grid
+visualization in LeetcodeUltra. It excludes Debug Visualizer's standalone VS
+Code extension runtime, webview server, bundled dependencies, build artifacts,
+and media assets. If a VSIX or other combined artifact containing this work is
+redistributed, the GPL-3.0 obligations for the included Debug Visualizer source
+and derived portions must be honored.
+
+LeetCode C++ Debugger source snapshot
+-------------------------------------
+
+This working branch also contains a minimal MIT-licensed source/resource
+snapshot from LeetCode C++ Debugger:
+
+https://github.com/xavier-cai/vscode-leetcode-cpp-debug
+
+Version: 0.0.9
+License: MIT, preserved at vendor/leetcode-cpp-debugger/LICENSE.txt.
+
+The snapshot is limited to the C++ harness resources needed by LeetcodeUltra's
+internal C++ debug workflow. LeetcodeUltra no longer invokes the
+leetcode-cpp-debugger.debug VS Code command or requires that extension to be
+installed.

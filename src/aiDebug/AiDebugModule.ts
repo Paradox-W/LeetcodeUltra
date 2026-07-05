@@ -5,6 +5,7 @@ import { AiDebugPanel, AiDebugViewModel } from "./AiDebugPanel";
 import { DapVariableCollector } from "./DapVariableCollector";
 import { OutPutType } from "../model/ConstDefind";
 import { ShowMessage } from "../utils/OutputUtils";
+import { fileMetaFromDocument } from "../utils/problemUtils";
 
 function getConfig(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration("leetcode-problem-rating");
@@ -336,7 +337,7 @@ class AiDebugService {
   }
 
   private isLeetCodeDocument(document: vscode.TextDocument): boolean {
-    return document.uri.scheme === "file" && /@lc app=.* id=.* lang=.*/.test(document.getText());
+    return !!fileMetaFromDocument(document);
   }
 
   private titleForDocument(document: vscode.TextDocument, problemId?: string): string {

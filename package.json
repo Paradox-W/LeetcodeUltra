@@ -5,7 +5,7 @@
     "version": "3.2.4",
     "author": "ccagml",
     "publisher": "paradox",
-    "license": "MIT",
+    "license": "GPL-3.0-only",
     "icon": "resources/LCPR.png",
     "engines": {
         "vscode": "^1.57.0"
@@ -47,6 +47,8 @@
         "onCommand:lcpr.workbench.case",
         "onCommand:lcpr.workbench.allcase",
         "onCommand:lcpr.workbench.debug",
+        "onCommand:lcpr.debugVisualizer.show",
+        "onDebug",
         "onCommand:lcpr.aiDebug.analyzeAndShow",
         "onCommand:leetcodeEnhanced.analyzeAndShow",
         "onCommand:leetcodeEnhanced.showKeyVariables",
@@ -317,6 +319,12 @@
                 "title": "调试当前用例",
                 "category": "LeetCode",
                 "icon": "$(debug-alt)"
+            },
+            {
+                "command": "lcpr.debugVisualizer.show",
+                "title": "Debug Visualizer: Show Expression",
+                "category": "LeetCode",
+                "icon": "$(graph)"
             },
             {
                 "command": "lcpr.aiDebug.analyzeAndShow",
@@ -1545,9 +1553,13 @@
         "watch": "tsc -watch -p ./",
         "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
         "prepare:debug-profile": "node scripts/prepare-debug-profile.js",
+        "doctor:debug": "node scripts/debug-tooling-doctor.js",
         "open:sandbox": "npm run prepare:debug-profile && code --new-window --user-data-dir=/Users/paradox/Documents/LeetcodeUltra/.vscode-test/user-data --extensions-dir=/Users/paradox/Documents/LeetcodeUltra/.vscode-test/extensions --extensionDevelopmentPath=/Users/paradox/Documents/LeetcodeUltra /Users/paradox/Documents/Leetcode/Leetcode.code-workspace",
+        "screenshot:vscode": "node scripts/capture-vscode-window.js",
         "test:ai-debug": "npm run compile && node scripts/ai-debug-smoke.js",
         "test:ai-debug:extension": "npm run compile && node scripts/ai-debug-extension-test-runner.js",
+        "test:debug-visualizer:extension": "npm run compile && node scripts/debug-visualizer-extension-test-runner.js",
+        "test:debug-api": "npm run compile && node scripts/debug-api-smoke-runner.js",
         "diagram:author": "node scripts/diagram-author.js",
         "diagram:validate": "npm run compile && node scripts/diagram-validate.js",
         "diagram:render-fixtures": "npm run compile && node scripts/diagram-render-fixtures.js"

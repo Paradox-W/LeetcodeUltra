@@ -5,7 +5,6 @@ import * as http from "http";
 import * as https from "https";
 import * as path from "path";
 import * as crypto from "crypto";
-import * as hljs from "highlight.js";
 import * as ConstDefind_1 from "../model/ConstDefind";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
 import * as MarkdownService_1 from "../service/MarkdownService";
@@ -55,6 +54,12 @@ class LeetCodeCompanionProvider {
                 error: "",
             },
         };
+    }
+    getHighlighter() {
+        if (!this.highlighter) {
+            this.highlighter = require("highlight.js");
+        }
+        return this.highlighter;
     }
     getMarkdownMediaRoot() {
         const markdownExtension = vscode.extensions.getExtension("vscode.markdown-language-features");
@@ -3593,14 +3598,15 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
             sh: "bash",
         };
         const language = aliases[raw] || aliases[normalized] || normalized;
-        return language && hljs.getLanguage(language) ? language : "";
+        const highlighter = this.getHighlighter();
+        return language && highlighter.getLanguage(language) ? language : "";
     }
     highlightSubmissionCode(code, lang) {
         const source = String(code || "");
         const language = this.resolveHighlightLanguage(lang);
         if (language) {
             try {
-                return hljs.highlight(source, { language, ignoreIllegals: true }).value;
+                return this.getHighlighter().highlight(source, { language, ignoreIllegals: true }).value;
             }
             catch (_) {
                 return this.escapeHtml(source);

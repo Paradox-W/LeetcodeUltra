@@ -12,12 +12,21 @@ const mainCodeUserDir = path.join(home, "Library", "Application Support", "Code"
 const mainSettingsPath = path.join(mainCodeUserDir, "settings.json");
 const mainGlobalStorage = path.join(mainCodeUserDir, "globalStorage");
 const debugGlobalStorage = path.join(debugUserDir, "globalStorage");
+const mainExtensions = path.join(home, ".vscode", "extensions");
 const leetcodeWorkspace = "/Users/paradox/Documents/Leetcode";
+const syncMarkerName = ".lcpr-sync-complete.json";
+const forceRefreshExtensions = process.env.LCPR_REFRESH_DEBUG_EXTENSIONS === "1";
 
 const extensionStorageIds = [
   "paradox.leetcodeultra",
   "ccagml.vscode-leetcode-problem-rating",
   "paradox.vscode-leetcode-problem-rating-plus",
+];
+
+const requiredExtensionIds = [
+  "leetcode.vscode-leetcode",
+  "ms-vscode.cpptools",
+  "vadimcn.vscode-lldb",
 ];
 
 function stripJsonComments(text) {
@@ -133,10 +142,111 @@ function ensureLeetCodeSessions() {
   }
 }
 
+function extensionIdFromPackage(extensionPath) {
+  const packagePath = path.join(extensionPath, "package.json");
+  if (!fs.existsSync(packagePath)) {
+    return "";
+  }
+  try {
+    const manifest = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+    return `${String(manifest.publisher || "").toLowerCase()}.${String(manifest.name || "").toLowerCase()}`;
+  } catch (_) {
+    return "";
+  }
+}
+
+function findInstalledExtension(extensionId) {
+  if (!fs.existsSync(mainExtensions)) {
+    return undefined;
+  }
+  const normalizedId = extensionId.toLowerCase();
+  const candidates = fs.readdirSync(mainExtensions)
+    .map((name) => path.join(mainExtensions, name))
+    .filter((item) => fs.statSync(item).isDirectory())
+    .filter((item) => extensionIdFromPackage(item) === normalizedId)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  return candidates[0];
+}
+
+function readExtensionManifest(extensionPath) {
+  const packagePath = path.join(extensionPath, "package.json");
+  if (!fs.existsSync(packagePath)) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(packagePath, "utf8"));
+  } catch (_) {
+    return undefined;
+  }
+}
+
+function sourceSignature(extensionPath) {
+  const manifest = readExtensionManifest(extensionPath) || {};
+  return {
+    id: extensionIdFromPackage(extensionPath),
+    version: String(manifest.version || ""),
+    source: path.basename(extensionPath),
+  };
+}
+
+function hasCompletedExtensionSync(source, target) {
+  if (forceRefreshExtensions) {
+    return false;
+  }
+  const markerPath = path.join(target, syncMarkerName);
+  const targetManifest = readExtensionManifest(target);
+  if (!fs.existsSync(markerPath) || !targetManifest) {
+    return false;
+  }
+  try {
+    const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    const signature = sourceSignature(source);
+    return marker.id === signature.id && marker.version === signature.version && marker.source === signature.source;
+  } catch (_) {
+    return false;
+  }
+}
+
+function markExtensionSyncComplete(source, target) {
+  const markerPath = path.join(target, syncMarkerName);
+  fs.writeFileSync(markerPath, `${JSON.stringify(sourceSignature(source), null, 2)}\n`);
+}
+
+function syncExtensionDirectory(extensionId, source) {
+  const target = path.join(debugExtensions, path.basename(source));
+  if (hasCompletedExtensionSync(source, target)) {
+    console.log(`Debug profile extension already synced: ${path.basename(source)}`);
+    return;
+  }
+  const startedAt = Date.now();
+  fs.rmSync(target, { recursive: true, force: true });
+  console.log(`Syncing VS Code extension: ${path.basename(source)}`);
+  fs.cpSync(source, target, { recursive: true, force: true });
+  markExtensionSyncComplete(source, target);
+  console.log(`Synced VS Code extension: ${path.basename(source)} (${Date.now() - startedAt}ms)`);
+}
+
+function syncRequiredExtensions() {
+  fs.mkdirSync(debugExtensions, { recursive: true });
+  const missing = [];
+  for (const extensionId of requiredExtensionIds) {
+    const source = findInstalledExtension(extensionId);
+    if (!source) {
+      missing.push(extensionId);
+      continue;
+    }
+    syncExtensionDirectory(extensionId, source);
+  }
+  if (missing.length) {
+    console.warn(`Missing required VS Code extensions in ${mainExtensions}: ${missing.join(", ")}`);
+  }
+}
+
 fs.mkdirSync(debugUserDir, { recursive: true });
 fs.mkdirSync(debugExtensions, { recursive: true });
 syncSettings();
 syncGlobalStorage();
 ensureLeetCodeSessions();
+syncRequiredExtensions();
 
 console.log(`Prepared VS Code debug profile: ${debugUserData}`);

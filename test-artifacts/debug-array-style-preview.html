@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Debug Array Style Preview</title>
+  <style>
+    :root {
+      --vscode-editor-background: #1f1f1f;
+      --vscode-editor-foreground: #e7e7e7;
+      --lcpr-workbench-bg: #181818;
+      --lcpr-workbench-fg: #eeeeee;
+      --lcpr-workbench-muted: #a8a8a8;
+      --vscode-editor-font-family: Menlo, Monaco, Consolas, monospace;
+    }
+    body {
+      margin: 0;
+      padding: 34px;
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-bg);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .debug-var-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .debug-var-name {
+      font-size: 32px;
+      font-weight: 700;
+    }
+    .debug-var-pill {
+      color: var(--lcpr-workbench-muted);
+      font: 20px var(--vscode-editor-font-family);
+    }
+    .debug-var-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 22px;
+      align-items: start;
+    }
+    .debug-grid {
+      display: grid;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 34px 0 30px;
+    }
+    .debug-grid-row.no-label {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .debug-grid-cells {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(76px, 1fr));
+      width: 100%;
+      min-width: max-content;
+      gap: 8px;
+    }
+    .debug-cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 76px;
+      min-height: 94px;
+      border: 2px solid color-mix(in srgb, #d6a117 88%, var(--vscode-editor-foreground) 12%);
+      border-radius: 16px;
+      background: var(--vscode-editor-background);
+      overflow: visible;
+      text-align: center;
+    }
+    .debug-cell.in-range {
+      background: color-mix(in srgb, #ffe08a 34%, var(--vscode-editor-background) 66%);
+    }
+    .debug-cell > strong {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 70px;
+      padding: 12px 8px;
+      color: var(--vscode-editor-foreground);
+      font: 30px var(--vscode-editor-font-family);
+      line-height: 1.15;
+    }
+    .debug-cell > span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 9px);
+      display: block;
+      padding: 0 5px;
+      color: var(--lcpr-workbench-muted);
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    .debug-markers {
+      position: absolute;
+      left: 50%;
+      top: -31px;
+      display: flex;
+      gap: 2px;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+    .debug-marker {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      color: #0b66d8;
+      background: transparent;
+      overflow: visible;
+    }
+    .debug-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 16px solid currentColor;
+      transform: translateX(-50%);
+    }
+    .debug-marker.right {
+      color: #c40000;
+    }
+    .debug-marker-legend {
+      display: grid;
+      gap: 8px;
+      min-width: 96px;
+      padding-top: 42px;
+    }
+    .debug-marker-legend-item {
+      display: grid;
+      grid-template-columns: 16px max-content;
+      align-items: center;
+      gap: 9px;
+      font: 20px var(--vscode-editor-font-family);
+    }
+    .debug-legend-marker {
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 14px solid currentColor;
+    }
+  </style>
+</head>
+<body>
+  <div class="debug-var-head">
+    <div class="debug-var-name">nums</div>
+    <span class="debug-var-pill">std::vector&lt;int&gt;</span>
+    <span class="debug-var-pill">size=6</span>
+  </div>
+  <div class="debug-var-body">
+    <div class="debug-grid">
+      <div class="debug-grid-row no-label">
+        <div class="debug-grid-cells">
+          <div class="debug-cell"><strong>2</strong><span>0</span></div>
+          <div class="debug-cell in-range"><div class="debug-markers"><span class="debug-marker"></span></div><strong>3</strong><span>1</span></div>
+          <div class="debug-cell in-range"><strong>1</strong><span>2</span></div>
+          <div class="debug-cell in-range"><strong>2</strong><span>3</span></div>
+          <div class="debug-cell in-range"><div class="debug-markers"><span class="debug-marker right"></span></div><strong>4</strong><span>4</span></div>
+          <div class="debug-cell"><strong>3</strong><span>5</span></div>
+        </div>
+      </div>
+    </div>
+    <aside class="debug-marker-legend">
+      <div class="debug-marker-legend-item" style="color:#0b66d8"><span class="debug-legend-marker"></span><span>left</span></div>
+      <div class="debug-marker-legend-item" style="color:#c40000"><span class="debug-legend-marker"></span><span>right</span></div>
+    </aside>
+  </div>
+</body>
+</html>

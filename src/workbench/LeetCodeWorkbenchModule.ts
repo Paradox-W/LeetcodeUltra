@@ -470,16 +470,6 @@ class LeetCodeWorkbenchProvider {
         const data = this.getResultData(this.currentResult);
         const sys = data.system_message || this.currentResult.submitEvent || {};
         this.ensureActivityLoaded(this.currentResult.action === "submit" || sys.sub_type === "submit");
-        if (this.currentResult.action === "debug" || this.currentResult.runMode === "debug") {
-            this.scheduleDebugVisualRefresh();
-        }
-    }
-    scheduleDebugVisualRefresh() {
-        [450, 1300].forEach((delay) => {
-            setTimeout(() => {
-                this.refreshDebugVisual().then(undefined, () => undefined);
-            }, delay);
-        });
     }
     async refreshDebugVisual() {
         if (!this.currentResult) {
@@ -493,12 +483,18 @@ class LeetCodeWorkbenchProvider {
                 },
             };
         }
-        const nextResult = Object.assign({}, this.currentResult, {
-            debugVisualLoading: true,
-        });
-        this.currentResult = nextResult;
-        this.currentState = this.readState();
-        this.postState();
+        if (this.refreshingDebugVisual) {
+            return;
+        }
+        this.refreshingDebugVisual = true;
+        if (!this.currentResult || !this.currentResult.debugVisual) {
+            const nextResult = Object.assign({}, this.currentResult, {
+                debugVisualLoading: true,
+            });
+            this.currentResult = nextResult;
+            this.currentState = this.readState();
+            this.postState();
+        }
         try {
             const model = await vscode.commands.executeCommand("lcpr.debugVisualizer.collect");
             this.currentResult = Object.assign({}, this.currentResult, {
@@ -521,6 +517,7 @@ class LeetCodeWorkbenchProvider {
                 debugVisualUpdatedAt: Date.now(),
             });
         }
+        this.refreshingDebugVisual = false;
         this.currentState = this.readState();
         this.postState();
     }
@@ -1457,10 +1454,29 @@ class LeetCodeWorkbenchProvider {
     }
     .debug-visual {
       margin-top: 0;
-      padding: 10px;
-      border: 2px solid color-mix(in srgb, var(--lcpr-workbench-border) 82%, var(--lcpr-workbench-muted) 18%);
-      border-radius: 10px;
-      background: color-mix(in srgb, var(--vscode-editor-background, var(--lcpr-workbench-bg)) 92%, var(--lcpr-workbench-input) 8%);
+      padding: 0;
+    }
+    .debug-theme-selector {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      margin: 0 0 4px;
+    }
+    .debug-theme-selector button {
+      height: 22px;
+      padding: 0 7px;
+      border: 1px solid color-mix(in srgb, var(--lcpr-workbench-border) 80%, transparent);
+      border-radius: 3px;
+      color: var(--lcpr-workbench-muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 20px;
+    }
+    .debug-theme-selector button:hover,
+    .debug-theme-selector button.active {
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-hover);
     }
     .debug-visual-warnings {
       display: grid;
@@ -1707,6 +1723,270 @@ class LeetCodeWorkbenchProvider {
       overflow: hidden;
       clip: rect(0 0 0 0);
       white-space: nowrap;
+    }
+    .debug-marker-svg {
+      display: none;
+    }
+    .debug-visual.theme-two {
+      --debug-two-blue: #2f80ff;
+      --debug-two-fill: #e1edff;
+      --debug-two-grid: #9a9a9a;
+      --debug-two-ink: #050505;
+      --debug-two-muted: #8b8b8b;
+      --debug-two-cell: 50px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      color: var(--debug-two-ink);
+      background: transparent;
+    }
+    .debug-visual.theme-two .debug-theme-selector {
+      margin: 0 0 4px;
+    }
+    .debug-visual.theme-two .debug-theme-selector button {
+      height: 20px;
+      padding: 0 7px;
+      border-color: #d8d8d8;
+      color: #747474;
+      background: #ffffff;
+      font-size: 11px;
+      line-height: 18px;
+    }
+    .debug-visual.theme-two .debug-theme-selector button:hover,
+    .debug-visual.theme-two .debug-theme-selector button.active {
+      border-color: var(--debug-two-blue);
+      color: var(--debug-two-blue);
+      background: #eef5ff;
+    }
+    .debug-visual.theme-two .debug-var {
+      padding: 25px 26px 28px;
+      border: 1px solid #d9dce2;
+      border-radius: 0;
+      background: #ffffff;
+    }
+    .debug-visual.theme-two .debug-var-layout {
+      display: grid;
+      grid-template-columns: max-content minmax(145px, 210px);
+      gap: 20px;
+      align-items: center;
+      justify-content: start;
+      min-width: 0;
+    }
+    .debug-visual.theme-two .debug-var-main {
+      min-width: 0;
+      overflow-x: visible;
+    }
+    .debug-visual.theme-two .debug-var-head {
+      align-items: flex-end;
+      gap: 5px;
+      margin: 0 0 6px;
+    }
+    .debug-visual.theme-two .debug-var-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--debug-two-ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 26px;
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .debug-visual.theme-two .debug-var-name::before {
+      content: "";
+      flex: 0 0 auto;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--debug-two-ink);
+    }
+    .debug-visual.theme-two .debug-var-meta {
+      gap: 5px;
+      align-items: flex-end;
+    }
+    .debug-visual.theme-two .debug-var-pill {
+      max-width: none;
+      color: #6e6e6e;
+      font: 12px var(--vscode-editor-font-family);
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .debug-visual.theme-two .debug-var-pill:not(:first-child) {
+      display: none;
+    }
+    .debug-visual.theme-two .debug-var-body {
+      display: block;
+    }
+    .debug-visual.theme-two .debug-marker-legend {
+      display: none;
+    }
+    .debug-visual.theme-two .debug-grid,
+    .debug-visual.theme-two .debug-array {
+      gap: 0;
+      padding: 0 0 22px;
+      overflow-x: auto;
+    }
+    .debug-visual.theme-two .debug-grid-cells,
+    .debug-visual.theme-two .debug-array {
+      grid-template-columns: repeat(var(--debug-cell-count, 1), var(--debug-two-cell));
+      gap: 0;
+      width: max-content;
+      min-width: 0;
+    }
+    .debug-visual.theme-two .debug-grid-row,
+    .debug-visual.theme-two .debug-grid-row.no-label {
+      display: block;
+    }
+    .debug-visual.theme-two .debug-grid-label {
+      display: none;
+    }
+    .debug-visual.theme-two .debug-cell {
+      width: var(--debug-two-cell);
+      height: var(--debug-two-cell);
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--debug-two-grid);
+      border-left-width: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--debug-two-ink);
+    }
+    .debug-visual.theme-two .debug-cell:first-child {
+      border-left-width: 1px;
+      border-top-left-radius: 5px;
+      border-bottom-left-radius: 5px;
+    }
+    .debug-visual.theme-two .debug-cell:last-child {
+      border-top-right-radius: 5px;
+      border-bottom-right-radius: 5px;
+    }
+    .debug-visual.theme-two .debug-cell.in-range {
+      border-top-color: var(--debug-two-blue);
+      border-bottom-color: var(--debug-two-blue);
+      background: var(--debug-two-fill);
+    }
+    .debug-visual.theme-two .debug-cell.range-start {
+      border-left-width: 1px;
+      border-left-color: var(--debug-two-blue);
+    }
+    .debug-visual.theme-two .debug-cell.range-end {
+      border-right-color: var(--debug-two-blue);
+    }
+    .debug-visual.theme-two .debug-cell.range-start::before,
+    .debug-visual.theme-two .debug-cell.range-end::after {
+      content: "";
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      z-index: 1;
+      width: 0;
+      border-left: 2px solid var(--debug-two-blue);
+      pointer-events: none;
+    }
+    .debug-visual.theme-two .debug-cell.range-start::before {
+      left: -1px;
+    }
+    .debug-visual.theme-two .debug-cell.range-end::after {
+      right: -1px;
+    }
+    .debug-visual.theme-two .debug-cell > strong {
+      min-height: 0;
+      padding: 10px 4px 2px;
+      color: var(--debug-two-ink);
+      font: 23px var(--vscode-editor-font-family);
+      line-height: 1;
+    }
+    .debug-visual.theme-two .debug-cell > span {
+      top: calc(100% + 7px);
+      color: var(--debug-two-muted);
+      font: 11px var(--vscode-editor-font-family);
+      line-height: 1;
+    }
+    .debug-visual.theme-two .debug-cell > span::before {
+      content: "[" attr(data-index) "]";
+    }
+    .debug-visual.theme-two .debug-cell > span {
+      font-size: 0;
+    }
+    .debug-visual.theme-two .debug-cell > span::before {
+      font-size: 11px;
+    }
+    .debug-visual.theme-two .debug-markers {
+      left: 0;
+      top: 4px;
+      z-index: 2;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      max-width: calc(100% - 4px);
+      transform: translateX(0);
+    }
+    .debug-visual.theme-two .debug-marker {
+      width: 29px;
+      height: 14px;
+      color: var(--debug-two-blue) !important;
+      background: transparent;
+      border: 0;
+      clip-path: none;
+    }
+    .debug-visual.theme-two .debug-marker::before,
+    .debug-visual.theme-two .debug-marker::after {
+      content: none;
+    }
+    .debug-visual.theme-two .debug-marker-text {
+      display: none;
+    }
+    .debug-visual.theme-two .debug-marker-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .debug-visual.theme-two .debug-source-panel {
+      align-self: stretch;
+      min-width: 0;
+      padding: 16px 0 13px 20px;
+      border-left: 1px solid #d9d9d9;
+      color: var(--debug-two-ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .debug-visual.theme-two .debug-source-title {
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .debug-visual.theme-two .debug-source-lines {
+      display: grid;
+      gap: 6px;
+      color: #101010;
+      font-size: 11px;
+      line-height: 1.4;
+      max-width: 100%;
+      overflow: hidden;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .debug-visual.theme-two .debug-source-line {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .debug-visual.theme-two .debug-source-detail {
+      color: #6f6f6f;
+      font: 10px var(--vscode-editor-font-family);
+      overflow-wrap: anywhere;
+    }
+    .debug-visual.theme-two .debug-visual-footer {
+      margin-top: 6px;
+      border-top-color: #dedede;
+    }
+    .debug-visual.theme-two .debug-source,
+    .debug-visual.theme-two .debug-source strong,
+    .debug-visual.theme-two .debug-source span,
+    .debug-visual.theme-two .debug-visual-warnings {
+      color: #777777;
     }
     .debug-list {
       display: flex;
@@ -2082,7 +2362,15 @@ class LeetCodeWorkbenchProvider {
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    let state = { isLeetCodeFile: false, cases: [], activityExpanded: false, activityRange: 7 };
+    function storedDebugVisualTheme() {
+      try {
+        const value = localStorage.getItem('lcpr.debugVisualTheme');
+        return value === 'theme-two' ? 'theme-two' : 'theme-one';
+      } catch (_) {
+        return 'theme-one';
+      }
+    }
+    let state = { isLeetCodeFile: false, cases: [], activityExpanded: false, activityRange: 7, debugVisualTheme: storedDebugVisualTheme() };
     const content = document.getElementById('content');
     const file = document.getElementById('file');
     const resultEl = document.getElementById('result');
@@ -2105,6 +2393,9 @@ class LeetCodeWorkbenchProvider {
     }
     function getResultData(payload) {
       return (payload && payload.result) || payload || {};
+    }
+    function isDebugPayload(payload) {
+      return !!(payload && (payload.action === 'debug' || payload.runMode === 'debug'));
     }
     function getStatus(payload) {
       if (!payload) return '';
@@ -2733,11 +3024,39 @@ class LeetCodeWorkbenchProvider {
     function debugMarkerName(marker) {
       return String(marker && (marker.label || marker.id || '') || '');
     }
+    function debugMarkerKey(marker) {
+      return debugMarkerName(marker).toLowerCase();
+    }
+    function debugMarkerClass(marker) {
+      const key = debugMarkerKey(marker);
+      if (/^(left|start|begin|slow|lo|l)$/.test(key)) return ' debug-marker-left';
+      if (/^(mid|middle|m)$/.test(key)) return ' debug-marker-mid';
+      if (/^(right|end|fast|hi|r)$/.test(key)) return ' debug-marker-right';
+      return '';
+    }
+    function debugMarkerShortName(marker) {
+      const key = debugMarkerKey(marker);
+      if (/^(left|start|begin|slow|lo|l)$/.test(key)) return 'L';
+      if (/^(mid|middle|m)$/.test(key)) return 'M';
+      if (/^(right|end|fast|hi|r)$/.test(key)) return 'R';
+      const name = debugMarkerName(marker);
+      return name ? name.slice(0, 1).toUpperCase() : '';
+    }
+    function renderDebugMarkerSvg(marker) {
+      const label = debugMarkerShortName(marker);
+      const isMid = /^(mid|middle|m)$/.test(debugMarkerKey(marker));
+      const fill = isMid ? 'currentColor' : '#ffffff';
+      const textFill = isMid ? '#ffffff' : 'currentColor';
+      return '<svg class="debug-marker-svg" viewBox="0 0 50 24" aria-hidden="true" focusable="false">' +
+        '<path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="' + fill + '" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"></path>' +
+        '<text x="20" y="17" text-anchor="middle" fill="' + textFill + '" font-family="var(--vscode-editor-font-family)" font-size="17" font-weight="500">' + escapeHtml(label) + '</text>' +
+      '</svg>';
+    }
     function debugMarkerFallbackColor(marker) {
-      const key = debugMarkerName(marker).toLowerCase();
-      if (/^(left|start|begin|slow)$/.test(key)) return '#0b66d8';
-      if (/^(mid|middle)$/.test(key)) return '#d9a300';
-      if (/^(right|end|fast)$/.test(key)) return '#c40000';
+      const key = debugMarkerKey(marker);
+      if (/^(left|start|begin|slow|lo|l)$/.test(key)) return '#0b66d8';
+      if (/^(mid|middle|m)$/.test(key)) return '#d9a300';
+      if (/^(right|end|fast|hi|r)$/.test(key)) return '#c40000';
       return '#8e44ad';
     }
     function debugMarkerColorStyle(marker) {
@@ -2763,13 +3082,37 @@ class LeetCodeWorkbenchProvider {
         '<div class="debug-marker-legend-item"' + debugMarkerColorStyle(marker) + '><span class="debug-legend-marker"></span><span>' + escapeHtml(debugMarkerName(marker)) + '</span></div>'
       ).join('') + '</aside>';
     }
+    function debugVisualColumnCount(variable) {
+      const visual = variable && variable.visual;
+      if (!visual) return 0;
+      if (visual.kind && visual.kind.grid && Array.isArray(visual.rows) && visual.rows[0] && Array.isArray(visual.rows[0].columns)) {
+        return visual.rows[0].columns.length;
+      }
+      if (visual.kind && visual.kind.array && Array.isArray(visual.values)) {
+        return visual.values.length;
+      }
+      return 0;
+    }
+    function compactRuntimeType(value) {
+      return String(value || '')
+        .replace(/std::(__1::)?/g, '')
+        .replace(/\\s+/g, '')
+        .replace(/,allocator<[^<>]*(?:<[^<>]*>[^<>]*)*>/g, '');
+    }
+    function debugTypeChip(variable) {
+      const type = compactRuntimeType(variable && variable.runtimeType);
+      const count = debugVisualColumnCount(variable);
+      if (type && count > 0) return type + '[' + count + ']';
+      return type;
+    }
     function renderDebugVarHeader(variable) {
       const chips = [];
-      if (variable && variable.value) {
-        chips.push(variable.value);
+      const typeChip = debugTypeChip(variable);
+      if (typeChip) {
+        chips.push(typeChip);
       }
-      if (variable && variable.runtimeType) {
-        chips.push(variable.runtimeType);
+      if (!typeChip && variable && variable.value) {
+        chips.push(variable.value);
       }
       if (variable && variable.expression && variable.expression !== variable.name) {
         chips.push(variable.expression);
@@ -2790,6 +3133,42 @@ class LeetCodeWorkbenchProvider {
       }
       return parts.length ? '<div class="debug-visual-footer">' + parts.join('') + '</div>' : '';
     }
+    function wrapSourceLine(text, limit) {
+      const value = String(text || '');
+      const size = limit || 28;
+      const lines = [];
+      let current = '';
+      value.split(/([,(])/).forEach((part) => {
+        if (!part) return;
+        if ((current + part).length > size && current) {
+          lines.push(current);
+          current = part.replace(/^,/, ', ');
+        } else {
+          current += part;
+        }
+      });
+      if (current) lines.push(current);
+      return lines.length ? lines : (value ? [value] : []);
+    }
+    function renderDebugSourcePanel(model, variable, loading) {
+      const status = loading ? '采集中' : (model && model.status ? model.status : '');
+      const expression = variable && variable.expression && variable.expression !== variable.name ? variable.expression : '';
+      const type = variable && variable.runtimeType ? compactRuntimeType(variable.runtimeType) : debugTypeChip(variable);
+      const lines = [];
+      if (status) {
+        wrapSourceLine(status, 26).forEach((line) => lines.push('<div class="debug-source-line">' + escapeHtml(line) + '</div>'));
+      }
+      if (expression) {
+        lines.push('<div class="debug-source-detail">表达式：' + escapeHtml(expression) + '</div>');
+      }
+      if (type) {
+        lines.push('<div class="debug-source-detail">类型：' + escapeHtml(type) + '</div>');
+      }
+      if (!lines.length) {
+        lines.push('<div class="debug-source-detail">当前暂停栈帧</div>');
+      }
+      return '<aside class="debug-source-panel"><div class="debug-source-title">来源：</div><div class="debug-source-lines">' + lines.join('') + '</div></aside>';
+    }
     function renderDebugGridPayload(visual) {
       const rows = Array.isArray(visual.rows) ? visual.rows : [];
       const markers = Array.isArray(visual.markers) ? visual.markers : [];
@@ -2805,10 +3184,12 @@ class LeetCodeWorkbenchProvider {
           '<div class="debug-grid-cells" style="--debug-cell-count:' + Math.max(1, cells.length) + '">' + cells.map((cell, columnIndex) => {
             const cellMarkers = markers.filter((marker) => Number(marker.row) === rowIndex && Number(marker.column) === columnIndex);
             const markerHtml = cellMarkers.length
-              ? '<div class="debug-markers">' + cellMarkers.map((marker) => '<span class="debug-marker"' + debugMarkerColorStyle(marker) + ' title="' + escapeHtml(marker.label || marker.id || '') + '"><span class="debug-marker-text">' + escapeHtml(marker.label || marker.id || '') + '</span></span>').join('') + '</div>'
+              ? '<div class="debug-markers">' + cellMarkers.map((marker) => '<span class="debug-marker' + debugMarkerClass(marker) + '"' + debugMarkerColorStyle(marker) + ' title="' + escapeHtml(marker.label || marker.id || '') + '">' + renderDebugMarkerSvg(marker) + '<span class="debug-marker-text">' + escapeHtml(debugMarkerShortName(marker)) + '</span></span>').join('') + '</div>'
               : '';
-            const rangeClass = columnIndex >= rangeStart && columnIndex <= rangeEnd ? ' in-range' : '';
-            return '<div class="debug-cell' + rangeClass + '">' + markerHtml + '<strong>' + escapeHtml(cell && cell.content || '') + '</strong><span>' + escapeHtml(cell && cell.tag || String(columnIndex)) + '</span></div>';
+            const inRange = columnIndex >= rangeStart && columnIndex <= rangeEnd;
+            const rangeClass = inRange ? ' in-range' + (columnIndex === rangeStart ? ' range-start' : '') + (columnIndex === rangeEnd ? ' range-end' : '') : '';
+            const tag = cell && cell.tag || String(columnIndex);
+            return '<div class="debug-cell' + rangeClass + '">' + markerHtml + '<strong>' + escapeHtml(cell && cell.content || '') + '</strong><span data-index="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</span></div>';
           }).join('') + '</div></div>';
       }).join('') + '</div>';
     }
@@ -2820,7 +3201,7 @@ class LeetCodeWorkbenchProvider {
       }
       if (visual.kind.array && Array.isArray(visual.values)) {
         return '<div class="debug-array" style="--debug-cell-count:' + Math.max(1, visual.values.length) + '">' + visual.values.map((item) =>
-          '<div class="debug-cell"><strong>' + escapeHtml(item.value) + '</strong><span>' + escapeHtml(item.name) + '</span></div>'
+          '<div class="debug-cell"><strong>' + escapeHtml(item.value) + '</strong><span data-index="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) + '</span></div>'
         ).join('') + '</div>';
       }
       if (visual.kind.list && Array.isArray(visual.nodes)) {
@@ -2845,18 +3226,30 @@ class LeetCodeWorkbenchProvider {
       }
       return '<pre class="result-pre">' + escapeHtml(visual.text || variable.value || variable.error || '') + '</pre>';
     }
+    function debugVisualTheme() {
+      return state.debugVisualTheme === 'theme-two' ? 'theme-two' : 'theme-one';
+    }
+    function renderDebugThemeSelector() {
+      const theme = debugVisualTheme();
+      const button = (value, label) => '<button type="button" class="' + (theme === value ? 'active' : '') + '" data-debug-theme="' + value + '" aria-pressed="' + (theme === value ? 'true' : 'false') + '">' + label + '</button>';
+      return '<div class="debug-theme-selector">' + button('theme-one', '主题一') + button('theme-two', '主题二') + '</div>';
+    }
     function renderDebugVisual(payload) {
-      const isDebug = payload && (payload.action === 'debug' || payload.runMode === 'debug');
+      const isDebug = isDebugPayload(payload);
       if (!isDebug) return '';
       const model = payload.debugVisual;
       const loading = !!payload.debugVisualLoading;
       const variables = model && Array.isArray(model.variables) ? model.variables : [];
+      const theme = debugVisualTheme();
       const body = variables.length
-        ? '<div class="debug-visual-vars">' + variables.map((variable) =>
-          '<article class="debug-var"><div class="debug-var-layout">' + renderDebugVarHeader(variable) + '<div class="debug-var-body"><div class="debug-var-figure">' + renderDebugVisualPayload(variable) + '</div>' + renderDebugMarkerLegend(variable) + '</div></div></article>'
-        ).join('') + renderDebugFooter(model, loading) + '</div>'
+        ? '<div class="debug-visual-vars">' + variables.map((variable) => {
+          if (theme === 'theme-two') {
+            return '<article class="debug-var"><div class="debug-var-layout"><div class="debug-var-main">' + renderDebugVarHeader(variable) + '<div class="debug-var-body"><div class="debug-var-figure">' + renderDebugVisualPayload(variable) + '</div></div></div>' + renderDebugSourcePanel(model, variable, loading) + '</div></article>';
+          }
+          return '<article class="debug-var"><div class="debug-var-layout">' + renderDebugVarHeader(variable) + '<div class="debug-var-body"><div class="debug-var-figure">' + renderDebugVisualPayload(variable) + '</div>' + renderDebugMarkerLegend(variable) + '</div></div></article>';
+        }).join('') + (theme === 'theme-two' ? '' : renderDebugFooter(model, loading)) + '</div>'
         : '<div class="result-waiting">' + (loading ? '正在从当前暂停栈帧采集数组和容器。' : '调试器暂停后会自动显示一维数组、vector 和可计算位置的指针/迭代器。') + '</div>';
-      return '<section class="debug-visual">' + body + '</section>';
+      return '<section class="debug-visual ' + theme + '">' + renderDebugThemeSelector() + body + '</section>';
     }
     function renderResult() {
       const payload = state.result;
@@ -2874,7 +3267,7 @@ class LeetCodeWorkbenchProvider {
         resultEl.innerHTML = renderActivityStatus('tone-running', '运行', waitingText);
         return;
       }
-      const isDebug = payload && (payload.action === 'debug' || payload.runMode === 'debug');
+      const isDebug = isDebugPayload(payload);
       resultEl.innerHTML = '<div class="result-body ' + tone + '">' + (isDebug ? '' : resultSummary(payload) + summaryLines(payload) + renderPerformanceCharts(payload) + diagnostics(payload)) + renderDebugVisual(payload) + '</div>';
     }
     function icon(name) {
@@ -2981,6 +3374,18 @@ class LeetCodeWorkbenchProvider {
       }
     });
     resultEl.addEventListener('click', (event) => {
+      const themeTarget = event.target && event.target.closest ? event.target.closest('[data-debug-theme]') : undefined;
+      if (themeTarget) {
+        const theme = themeTarget.getAttribute('data-debug-theme') === 'theme-two' ? 'theme-two' : 'theme-one';
+        state.debugVisualTheme = theme;
+        try {
+          localStorage.setItem('lcpr.debugVisualTheme', theme);
+        } catch (_) {
+          // Ignore webview storage failures.
+        }
+        renderResult();
+        return;
+      }
       const rangeTarget = event.target && event.target.closest ? event.target.closest('[data-activity-range]') : undefined;
       if (rangeTarget) {
         state.activityRange = Number(rangeTarget.getAttribute('data-activity-range')) || 7;
@@ -3062,9 +3467,11 @@ class LeetCodeWorkbenchProvider {
       if (event.data && event.data.type === 'state') {
         const localActivityExpanded = !!state.activityExpanded;
         const localActivityRange = Number(state.activityRange || 7) || 7;
+        const localDebugVisualTheme = debugVisualTheme();
         state = Object.assign({ activityExpanded: false, activityRange: 7 }, event.data.state || {}, {
           activityExpanded: localActivityExpanded,
           activityRange: localActivityRange,
+          debugVisualTheme: localDebugVisualTheme,
         });
         render();
       }

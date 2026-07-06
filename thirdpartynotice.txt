@@ -1,5 +1,9 @@
 THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-For vscode-leetcode extension
+For LeetcodeUltra
+
+LeetcodeUltra as a whole is distributed under GPL-3.0-only. This file lists
+upstream and third-party notices that remain applicable to included source,
+snapshots, dependencies, and other incorporated materials.
 
 This extension uses Open Source components. You can find the source code of their
 open source projects along with the license information below. We acknowledge and
@@ -172,4 +176,3 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 END OF markdown-it NOTICES AND INFORMATION
 ==================================
-

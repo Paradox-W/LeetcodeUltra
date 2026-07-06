@@ -475,6 +475,15 @@ class ExecuteService {
             });
         });
     }
+    trySignInByCookie(login, cookie) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const cmd = [yield this.getLeetCodeBinaryPath(), "user", "-c"];
+            return yield this.callWithMsg("正在同步浏览器登录~~~~", this.nodeExecutable, cmd, undefined, this.trySignInByCookieProcInit, {
+                login: login,
+                cookie: cookie,
+            });
+        });
+    }
     trySignInProcInit(arg, child_process, resolve, reject) {
         var _a, _b, _c, _d;
         return __awaiter(this, void 0, void 0, function* () {
@@ -584,6 +593,47 @@ class ExecuteService {
                 return resolve(undefined);
             }
             (_d = child_process.stdin) === null || _d === void 0 ? void 0 : _d.write(`${pwd}\n`);
+        });
+    }
+    trySignInByCookieProcInit(arg, child_process, resolve, reject) {
+        var _a, _b;
+        return __awaiter(this, void 0, void 0, function* () {
+            let sentLogin = false;
+            let sentCookie = false;
+            (_a = child_process.stdout) === null || _a === void 0 ? void 0 : _a.on("data", (data) => __awaiter(this, void 0, void 0, function* () {
+                var _c, _d, _e;
+                data = data.toString();
+                BABA_1.BABA.getProxy(BABA_1.BabaStr.LogOutputProxy).get_log().append(data);
+                if (!sentLogin && data.match(/login:\s*/i)) {
+                    sentLogin = true;
+                    (_c = child_process.stdin) === null || _c === void 0 ? void 0 : _c.write(`${arg.login || "browser-login"}\n`);
+                    return;
+                }
+                if (!sentCookie && data.match(/cookie:\s*/i)) {
+                    sentCookie = true;
+                    (_d = child_process.stdin) === null || _d === void 0 ? void 0 : _d.write(`${arg.cookie}\n`);
+                    return;
+                }
+                let successMatch;
+                try {
+                    successMatch = JSON.parse(data);
+                }
+                catch (e) {
+                    successMatch = {};
+                }
+                if (successMatch.code == 100) {
+                    (_e = child_process.stdin) === null || _e === void 0 ? void 0 : _e.end();
+                    return resolve(successMatch.user_name || arg.login || "没有取到用户名");
+                }
+                else if (successMatch.code < 0) {
+                    child_process.stdin === null || child_process.stdin === void 0 ? void 0 : child_process.stdin.end();
+                    return reject(new Error(successMatch.msg));
+                }
+            }));
+            (_b = child_process.stderr) === null || _b === void 0 ? void 0 : _b.on("data", (data) => {
+                BABA_1.BABA.getProxy(BABA_1.BabaStr.LogOutputProxy).get_log().append(data.toString());
+            });
+            child_process.on("error", reject);
         });
     }
     get node() {

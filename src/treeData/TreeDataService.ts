@@ -30,6 +30,7 @@ import * as ConfigUtils_1 from "../utils/ConfigUtils";
 import * as SystemUtils_1 from "../utils/SystemUtils";
 import * as ProblemListDisplayModule_1 from "../workbench/ProblemListDisplayModule";
 import { companionService } from "../companion/CompanionModule";
+import { browserLoginService } from "../auth/BrowserLoginService";
 class TreeDataService {
     constructor() {
         this.onDidChangeTreeDataEvent = new vscode.EventEmitter();
@@ -326,6 +327,12 @@ class TreeDataService {
                 matchOnDetail: false,
                 placeHolder: "请选择登录方式 正在登录leetcode.com",
             };
+            picks.push({
+                label: "Browser Authorization",
+                detail: "在浏览器中完成授权登录，完成后自动返回 VS Code",
+                description: "[Recommended]",
+                value: "BrowserAuth",
+            });
             if ((0, ConfigUtils_1.getLeetCodeEndpoint)() == ConstDefind_1.Endpoint.LeetCodeCN) {
                 picks.push({
                     label: "LeetCode Account",
@@ -340,6 +347,11 @@ class TreeDataService {
                 qpOpiton.placeHolder = "请选择登录方式 正在登录中文版leetcode.cn";
             }
             if ((0, ConfigUtils_1.getLeetCodeEndpoint)() == ConstDefind_1.Endpoint.LeetCode) {
+                picks.push({
+                    label: "LeetCode Cookie",
+                    detail: "Use LeetCode cookie copied from browser to login",
+                    value: "Cookie",
+                });
                 picks.push({
                     label: "LeetCode chrome copy curl(bash) ",
                     detail: "使用chrome复制最后一个graphql网络请求为curl请求,去掉复制内容中的换行符",
@@ -360,6 +372,16 @@ class TreeDataService {
                 return;
             }
             let loginMethod = choice.value;
+            if (loginMethod === "BrowserAuth") {
+                try {
+                    yield browserLoginService.signIn();
+                    yield vscode.window.showInformationMessage("已打开浏览器，请在网页中完成 LeetCode 授权登录。");
+                }
+                catch (error) {
+                    yield (0, OutputUtils_1.ShowMessage)("打开浏览器登录失败. 请看看控制台输出信息", ConstDefind_1.OutPutType.error);
+                }
+                return;
+            }
             const isByCookie = loginMethod === "Cookie";
             const inMessage = isByCookie ? " 通过cookie登录" : "登录";
             try {

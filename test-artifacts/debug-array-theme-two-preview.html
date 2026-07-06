@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Debug Array Theme Two Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f8f8fb;
+      color: #050505;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .mock {
+      width: 1000px;
+      height: 330px;
+      margin: 0;
+      border: 1px solid #222;
+      background: #fafbfe;
+    }
+    .toolbar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      height: 52px;
+      padding: 0 20px;
+      border-bottom: 1px solid #eceef3;
+      color: #666;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .toolbar .submit {
+      height: 24px;
+      padding: 0 10px;
+      border-radius: 4px;
+      color: white;
+      background: #d8dbe1;
+      line-height: 24px;
+    }
+    .toolbar .cases {
+      margin-left: 14px;
+    }
+    .toolbar .title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .toolbar .ai {
+      margin-left: auto;
+      color: #777;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 62%) minmax(0, 38%);
+      height: calc(100% - 52px);
+    }
+    .left {
+      min-width: 0;
+      padding: 22px;
+      border-right: 1px solid #eceef3;
+      overflow: auto;
+    }
+    .right {
+      padding: 10px 16px 10px 18px;
+      overflow: hidden;
+    }
+    .case {
+      margin-bottom: 12px;
+      padding: 8px 10px;
+      border-left: 6px solid #aaa;
+      border-radius: 5px;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .case .box {
+      margin-top: 6px;
+      padding: 8px 10px;
+      border-radius: 3px;
+      background: #ddd;
+      color: #222;
+      font-family: Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.65;
+    }
+    .debug-theme-selector {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      margin: 0 0 4px;
+    }
+    .debug-theme-selector button {
+      height: 20px;
+      padding: 0 7px;
+      border: 1px solid #d8d8d8;
+      border-radius: 3px;
+      color: #747474;
+      background: #fff;
+      font-size: 11px;
+      line-height: 18px;
+    }
+    .debug-theme-selector .active {
+      border-color: #2f80ff;
+      color: #2f80ff;
+      background: #eef5ff;
+    }
+    .debug-visual {
+      --debug-two-blue: #2f80ff;
+      --debug-two-fill: #e1edff;
+      --debug-two-grid: #9a9a9a;
+      --debug-two-cell: 50px;
+      color: #050505;
+    }
+    .debug-var {
+      width: max-content;
+      max-width: 100%;
+      padding: 25px 26px 28px;
+      border: 1px solid #d9dce2;
+      background: #fff;
+      overflow-x: auto;
+    }
+    .debug-var-layout {
+      display: grid;
+      grid-template-columns: max-content minmax(145px, 210px);
+      gap: 20px;
+      align-items: center;
+      justify-content: start;
+      min-width: 0;
+    }
+    .debug-var-head {
+      display: flex;
+      align-items: flex-end;
+      gap: 5px;
+      margin: 0 0 6px;
+    }
+    .debug-var-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 26px;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .debug-var-name::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #050505;
+    }
+    .debug-var-pill {
+      margin-bottom: 3px;
+      color: #6e6e6e;
+      font: 12px Menlo, Monaco, Consolas, monospace;
+      line-height: 1;
+    }
+    .debug-grid {
+      display: grid;
+      padding: 0 0 22px;
+      overflow: auto;
+    }
+    .debug-grid-cells {
+      display: grid;
+      grid-template-columns: repeat(7, var(--debug-two-cell));
+      width: max-content;
+      gap: 0;
+    }
+    .debug-cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--debug-two-cell);
+      height: var(--debug-two-cell);
+      border: 1px solid var(--debug-two-grid);
+      border-left-width: 0;
+      text-align: center;
+      background: transparent;
+    }
+    .debug-cell:first-child {
+      border-left-width: 1px;
+      border-top-left-radius: 5px;
+      border-bottom-left-radius: 5px;
+    }
+    .debug-cell:last-child {
+      border-top-right-radius: 5px;
+      border-bottom-right-radius: 5px;
+    }
+    .debug-cell.in-range {
+      border-top-color: var(--debug-two-blue);
+      border-bottom-color: var(--debug-two-blue);
+      background: var(--debug-two-fill);
+    }
+    .debug-cell.range-start {
+      border-left-width: 1px;
+      border-left-color: var(--debug-two-blue);
+    }
+    .debug-cell.range-end {
+      border-right-color: var(--debug-two-blue);
+    }
+    .debug-cell.range-start::before,
+    .debug-cell.range-end::after {
+      content: "";
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      z-index: 1;
+      border-left: 2px solid var(--debug-two-blue);
+    }
+    .debug-cell.range-start::before { left: -1px; }
+    .debug-cell.range-end::after { right: -1px; }
+    .debug-cell strong {
+      padding: 10px 4px 2px;
+      color: #050505;
+      font: 23px Menlo, Monaco, Consolas, monospace;
+      font-weight: 400;
+      line-height: 1;
+    }
+    .debug-cell > span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 7px);
+      color: #8b8b8b;
+      font: 11px Menlo, Monaco, Consolas, monospace;
+      line-height: 1;
+    }
+    .debug-markers {
+      position: absolute;
+      left: 0;
+      top: 4px;
+      z-index: 2;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      max-width: calc(100% - 4px);
+    }
+    .debug-marker {
+      width: 29px;
+      height: 14px;
+      color: var(--debug-two-blue);
+    }
+    .debug-marker.mid { color: #d9a300; }
+    .debug-marker.right { color: #c40000; }
+    .debug-marker-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .debug-source-panel {
+      align-self: stretch;
+      min-width: 0;
+      padding: 16px 0 13px 20px;
+      border-left: 1px solid #d9d9d9;
+    }
+    .debug-source-title {
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .debug-source-lines {
+      display: grid;
+      gap: 6px;
+      color: #101010;
+      font-size: 11px;
+      line-height: 1.4;
+      max-width: 100%;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .debug-source-detail {
+      color: #6f6f6f;
+      font: 10px Menlo, Monaco, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <main class="mock">
+    <div class="toolbar">
+      <span class="submit">提交</span>
+      <span class="cases">全部用例</span>
+      <span class="title">209. minimum size subarray sum</span>
+      <span class="ai">□ 开启 AI 调试　恢复默认用例</span>
+    </div>
+    <div class="workspace">
+      <section class="left">
+        <section class="debug-visual">
+          <div class="debug-theme-selector"><button>主题一</button><button class="active">主题二</button></div>
+          <article class="debug-var">
+            <div class="debug-var-layout">
+              <div class="debug-var-main">
+                <div class="debug-var-head">
+                  <div class="debug-var-name">nums</div>
+                  <span class="debug-var-pill">vector&lt;int&gt;[7]</span>
+                </div>
+                <div class="debug-grid">
+                  <div class="debug-grid-cells">
+                    <div class="debug-cell"><strong>18</strong><span>[0]</span></div>
+                    <div class="debug-cell in-range range-start">
+                      <div class="debug-markers">
+                        <span class="debug-marker"><svg class="debug-marker-svg" viewBox="0 0 50 24"><path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="#fff" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path><text x="20" y="17" text-anchor="middle" fill="currentColor" font-family="Menlo" font-size="17">L</text></svg></span>
+                      </div>
+                      <strong>7</strong><span>[1]</span>
+                    </div>
+                    <div class="debug-cell in-range">
+                      <div class="debug-markers">
+                        <span class="debug-marker mid"><svg class="debug-marker-svg" viewBox="0 0 50 24"><path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path><text x="20" y="17" text-anchor="middle" fill="#fff" font-family="Menlo" font-size="17">M</text></svg></span>
+                      </div>
+                      <strong>25</strong><span>[2]</span>
+                    </div>
+                    <div class="debug-cell in-range"><strong>9</strong><span>[3]</span></div>
+                    <div class="debug-cell in-range range-end">
+                      <div class="debug-markers">
+                        <span class="debug-marker right"><svg class="debug-marker-svg" viewBox="0 0 50 24"><path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="#fff" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path><text x="20" y="17" text-anchor="middle" fill="currentColor" font-family="Menlo" font-size="17">R</text></svg></span>
+                      </div>
+                      <strong>15</strong><span>[4]</span>
+                    </div>
+                    <div class="debug-cell"><strong>3</strong><span>[5]</span></div>
+                    <div class="debug-cell"><strong>-1</strong><span>[6]</span></div>
+                  </div>
+                </div>
+              </div>
+              <aside class="debug-source-panel">
+                <div class="debug-source-title">来源：</div>
+                <div class="debug-source-lines">
+                  <div class="debug-source-line">Solution::minSubArrayLen(int,</div>
+                  <div class="debug-source-line">std::__1::vector&lt;int,</div>
+                  <div class="debug-source-line">std::__1::allocator&lt;int&gt;&gt;&amp;)</div>
+                  <div class="debug-source-detail">表达式：nums</div>
+                </div>
+              </aside>
+            </div>
+          </article>
+        </section>
+      </section>
+      <section class="right">
+        <div class="case">用例 1<div class="box">7<br>[2,3,1,2,4,3]</div></div>
+        <div class="case">用例 2<div class="box">4<br>[1,4,4]</div></div>
+        <div class="case">用例 3<div class="box">11<br>[1,1,1,1,1,1,1,1]</div></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

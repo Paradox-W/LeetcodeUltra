@@ -431,13 +431,18 @@ class CppLeetCodePluginBridge {
       const child = cp.execFile(
         "/usr/bin/clang++",
         ["-std=c++23", "-g", "-O0", "-Wall", "-Wextra", generatedMain, "-o", program],
-        { cwd, env },
+        // Avoid Node's text-decoding path here. In some VS Code/Electron sessions
+        // StringDecoder can be monkey-patched by other extensions, which breaks
+        // execFile's default utf8 stream setup before clang++ even starts.
+        { cwd, env, encoding: "buffer" },
         (error, stdout, stderr) => {
-          if (stdout) {
-            this.log(`fallback build stdout:\n${stdout}`);
+          const stdoutText = Buffer.isBuffer(stdout) ? stdout.toString("utf8") : `${stdout || ""}`;
+          const stderrText = Buffer.isBuffer(stderr) ? stderr.toString("utf8") : `${stderr || ""}`;
+          if (stdoutText) {
+            this.log(`fallback build stdout:\n${stdoutText}`);
           }
-          if (stderr) {
-            this.log(`fallback build stderr:\n${stderr}`);
+          if (stderrText) {
+            this.log(`fallback build stderr:\n${stderrText}`);
           }
           if (error) {
             reject(error);

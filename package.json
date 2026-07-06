@@ -27,6 +27,7 @@
     ],
     "preview": true,
     "activationEvents": [
+        "onUri",
         "onCommand:lcpr.toggleLeetCodeCn",
         "onCommand:lcpr.signin",
         "onCommand:lcpr.signout",

@@ -38,6 +38,7 @@ import { registerProblemListDisplayOptions } from "./workbench/ProblemListDispla
 import { registerAiDebug } from "./aiDebug/AiDebugModule";
 import { registerDebugVisualizer } from "./debugVisualizer/DebugVisualizerModule";
 import { treeViewController } from "./controller/TreeViewController";
+import { browserLoginService } from "./auth/BrowserLoginService";
 
 //==================================BABA========================================
 
@@ -66,6 +67,8 @@ function runStartupTaskInBackground(name: string, task: () => Promise<void>, del
 
 export async function activate(context: ExtensionContext): Promise<void> {
   try {
+    browserLoginService.initialize(context);
+
     BABA.init([
       StatusBarTimeMediator,
       StatusBarTimeProxy,
@@ -113,6 +116,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
       registerProblemListDisplayOptions(context, treeDataService),
       registerAiDebug(context),
       registerDebugVisualizer(context),
+      window.registerUriHandler({ handleUri: browserLoginService.handleUriSignIn }),
       workspace.onDidOpenTextDocument((document) => treeViewController.ensureCppIntelliSenseForDocument(document)),
       window.onDidChangeActiveTextEditor((editor) => {
         if (editor) {

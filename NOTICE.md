@@ -6,9 +6,11 @@ as vscode-leetcode-problem-rating by ccagml under the MIT License.
 Original project:
 https://github.com/ccagml/leetcode-extension
 
-The MIT license and upstream attribution are preserved. LeetcodeUltra is
-published under a separate extension identity to avoid confusion with the
-upstream project.
+LeetcodeUltra itself is distributed under the GNU General Public License,
+version 3 only (GPL-3.0-only). Upstream attribution and the original MIT
+license notice from ccagml/leetcode-extension are preserved for the upstream
+material incorporated into this repository. LeetcodeUltra is published under a
+separate extension identity to avoid confusion with the upstream project.
 
 Debug Visualizer source snapshot
 --------------------------------
@@ -24,9 +26,9 @@ License: GPL-3.0, preserved at vendor/debug-visualizer/LICENSE.md.
 The snapshot is limited to source references needed for native C++ array grid
 visualization in LeetcodeUltra. It excludes Debug Visualizer's standalone VS
 Code extension runtime, webview server, bundled dependencies, build artifacts,
-and media assets. If a VSIX or other combined artifact containing this work is
-redistributed, the GPL-3.0 obligations for the included Debug Visualizer source
-and derived portions must be honored.
+and media assets. Because this repository contains GPL-3.0-covered Debug
+Visualizer source and derived portions, redistributed combined artifacts such
+as a VSIX must comply with GPL-3.0 obligations.
 
 LeetCode C++ Debugger source snapshot
 -------------------------------------

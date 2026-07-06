@@ -24,6 +24,25 @@ import * as ReplyUtils_1 from "../../utils/ReplyUtils";
 import * as sessionUtils_1 from "../../utils/sessionUtils";
 import * as chainNodeBase_1 from "../chainNodeBase";
 import * as queueUtils_1 from "../../utils/queueUtils";
+function looksLikeRawCookieInput(value) {
+    const text = String(value || "");
+    return /LEETCODE_SESSION=/.test(text) && /csrftoken=/.test(text) && !/^\s*curl\s/i.test(text);
+}
+function buildUsCookieHeaders(cookie, sessionCSRF) {
+    const normalizedCookie = String(cookie || "").trim();
+    return {
+        cookie: normalizedCookie,
+        "X-CSRFToken": sessionCSRF,
+        "X-Requested-With": "XMLHttpRequest",
+        "x-csrftoken": sessionCSRF,
+        "User-Agent": configUtils_1.configUtils.sys.my_headers.User_Agent,
+        Referer: configUtils_1.configUtils.sys.my_headers.Referer,
+        Origin: configUtils_1.configUtils.sys.my_headers.Origin,
+        Host: configUtils_1.configUtils.sys.my_headers.Host,
+        "Content-Type": configUtils_1.configUtils.sys.my_headers.Content_Type,
+        Accept: configUtils_1.configUtils.sys.my_headers.Accept,
+    };
+}
 class LeetCode extends chainNodeBase_1.ChainNodeBase {
     constructor() {
         super();
@@ -1055,12 +1074,20 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                 this.getUser(user, cb);
             }
             else {
-                const curl = parseCurl(user.cookie);
-                if (curl.header.referer)
-                    delete curl.header.referer;
-                if (curl.header.Referer)
-                    delete curl.header.Referer;
-                user.my_us_header = curl.header;
+                if (looksLikeRawCookieInput(user.cookie)) {
+                    const cookieData = this.parseCookie(user.cookie, cb);
+                    user.sessionId = cookieData.sessionId;
+                    user.sessionCSRF = cookieData.sessionCSRF;
+                    user.my_us_header = buildUsCookieHeaders(user.cookie, user.sessionCSRF);
+                }
+                else {
+                    const curl = parseCurl(user.cookie);
+                    if (curl.header.referer)
+                        delete curl.header.referer;
+                    if (curl.header.Referer)
+                        delete curl.header.Referer;
+                    user.my_us_header = curl.header;
+                }
                 sessionUtils_1.sessionUtils.saveUser(user);
                 this.getUser(user, cb);
             }

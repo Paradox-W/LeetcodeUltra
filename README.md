@@ -117,13 +117,13 @@ LeetcodeUltra 保留并增强了原项目的题单能力，适合按难度、标
 
 ## 与原始插件的关系
 
-LeetcodeUltra 是基于 MIT 协议的 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 派生增强版本，并使用独立扩展身份发布。
+LeetcodeUltra 是基于 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 的派生增强版本，并使用独立扩展身份发布。
 
-本项目保留原始 MIT 许可证与上游归属，同时在 UI、控制台、提交记录、性能展示、右侧助手和 C++ 调试体验上做了较大幅度的产品化改造。
+本项目当前整体以 `GPL-3.0-only` 分发；同时保留上游 `ccagml/leetcode-extension` 的 MIT 归属说明，以及仓库内第三方组件各自的许可证与声明。在此基础上，LeetcodeUltra 对 UI、控制台、提交记录、性能展示、右侧助手和 C++ 调试体验做了较大幅度的产品化改造。
 
 - 当前项目：https://github.com/Paradox-W/LeetcodeUltra
 - 上游项目：https://github.com/ccagml/leetcode-extension
-- 许可证：[MIT](./LICENSE)
+- 许可证：[GPL-3.0-only](./LICENSE)
 - 归属说明：[NOTICE.md](./NOTICE.md)
 
 ## 运行要求

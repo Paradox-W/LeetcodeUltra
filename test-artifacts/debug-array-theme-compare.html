@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Debug Array Theme Compare</title>
+  <style>
+    :root {
+      --vscode-editor-background: #1f1f1f;
+      --vscode-editor-foreground: #e7e7e7;
+      --vscode-editor-font-family: Menlo, Monaco, Consolas, monospace;
+      --lcpr-workbench-bg: #181818;
+      --lcpr-workbench-fg: #eeeeee;
+      --lcpr-workbench-muted: #a8a8a8;
+      --lcpr-workbench-border: rgba(255,255,255,.18);
+      --lcpr-workbench-hover: rgba(255,255,255,.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #111111;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .stage {
+      display: grid;
+      gap: 24px;
+      width: 1600px;
+      padding: 28px;
+    }
+    .caption {
+      margin: 0 0 10px;
+      color: #9b9b9b;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .debug-visual {
+      padding: 10px;
+      border: 2px solid color-mix(in srgb, var(--lcpr-workbench-border) 82%, var(--lcpr-workbench-muted) 18%);
+      border-radius: 10px;
+      color: var(--lcpr-workbench-fg);
+      background: color-mix(in srgb, var(--vscode-editor-background) 92%, #303030 8%);
+    }
+    .debug-theme-selector {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      margin: 0 0 4px;
+    }
+    .debug-theme-selector button {
+      height: 22px;
+      padding: 0 7px;
+      border: 1px solid color-mix(in srgb, var(--lcpr-workbench-border) 80%, transparent);
+      border-radius: 3px;
+      color: var(--lcpr-workbench-muted);
+      background: transparent;
+      font-size: 11px;
+    }
+    .debug-theme-selector button.active {
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-hover);
+    }
+    .debug-var {
+      min-width: 0;
+      padding: 16px 18px;
+    }
+    .debug-var-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 9px 14px;
+      margin-bottom: 8px;
+    }
+    .debug-var-name {
+      color: var(--lcpr-workbench-fg);
+      font-weight: 700;
+      font-size: 32px;
+    }
+    .debug-var-pill {
+      color: var(--lcpr-workbench-muted);
+      font: 20px var(--vscode-editor-font-family);
+      line-height: 1.2;
+    }
+    .debug-var-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 22px;
+      align-items: start;
+    }
+    .debug-grid {
+      display: grid;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 34px 0 30px;
+    }
+    .debug-grid-cells {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(76px, 1fr));
+      width: 100%;
+      min-width: max-content;
+      gap: 8px;
+    }
+    .debug-cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 76px;
+      min-height: 94px;
+      border: 2px solid color-mix(in srgb, #d6a117 88%, var(--vscode-editor-foreground) 12%);
+      border-radius: 16px;
+      background: var(--vscode-editor-background);
+      overflow: visible;
+      text-align: center;
+    }
+    .debug-cell.in-range {
+      background: color-mix(in srgb, #ffe08a 34%, var(--vscode-editor-background) 66%);
+    }
+    .debug-cell > strong {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 70px;
+      padding: 12px 8px;
+      color: var(--vscode-editor-foreground);
+      font: 30px var(--vscode-editor-font-family);
+      line-height: 1.15;
+    }
+    .debug-cell > span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 9px);
+      color: var(--lcpr-workbench-muted);
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    .debug-markers {
+      position: absolute;
+      left: 50%;
+      top: -31px;
+      display: flex;
+      transform: translateX(-50%);
+    }
+    .debug-marker {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      color: #0b66d8;
+    }
+    .debug-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 16px solid currentColor;
+      transform: translateX(-50%);
+    }
+    .debug-marker.debug-marker-mid { color: #d9a300; }
+    .debug-marker.debug-marker-right { color: #c40000; }
+    .debug-marker-text {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .debug-marker-svg {
+      display: none;
+    }
+    .debug-marker-legend {
+      display: grid;
+      gap: 8px;
+      min-width: 96px;
+      padding-top: 8px;
+    }
+    .debug-marker-legend-item {
+      display: grid;
+      grid-template-columns: 16px max-content;
+      align-items: center;
+      gap: 9px;
+      font: 20px var(--vscode-editor-font-family);
+    }
+    .debug-legend-marker {
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 14px solid currentColor;
+    }
+    .theme-two {
+      --debug-two-blue: #2f80ff;
+      --debug-two-fill: #e1edff;
+      --debug-two-grid: #9a9a9a;
+      --debug-two-ink: #050505;
+      --debug-two-muted: #8b8b8b;
+      padding: 24px 28px 30px;
+      border: 0;
+      border-radius: 0;
+      color: var(--debug-two-ink);
+      background: #f8f8fb;
+    }
+    .theme-two .debug-theme-selector {
+      margin-bottom: 10px;
+    }
+    .theme-two .debug-theme-selector button {
+      border-color: #d8d8d8;
+      color: #747474;
+      background: #ffffff;
+    }
+    .theme-two .debug-theme-selector button.active {
+      border-color: var(--debug-two-blue);
+      color: var(--debug-two-blue);
+      background: #eef5ff;
+    }
+    .theme-two .debug-var {
+      padding: 0;
+    }
+    .theme-two .debug-var-head {
+      align-items: flex-end;
+      gap: 14px;
+      margin: 0 0 12px;
+    }
+    .theme-two .debug-var-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--debug-two-ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 50px;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .theme-two .debug-var-name::before {
+      content: "";
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--debug-two-ink);
+    }
+    .theme-two .debug-var-pill {
+      color: #6e6e6e;
+      font: 28px var(--vscode-editor-font-family);
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .theme-two .debug-var-body {
+      display: block;
+    }
+    .theme-two .debug-marker-legend {
+      display: none;
+    }
+    .theme-two .debug-grid {
+      gap: 0;
+      padding: 16px 0 48px;
+    }
+    .theme-two .debug-grid-cells {
+      grid-template-columns: repeat(7, minmax(112px, 1fr));
+      gap: 0;
+    }
+    .theme-two .debug-cell {
+      min-width: 112px;
+      min-height: 136px;
+      border: 2px solid var(--debug-two-grid);
+      border-left-width: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .theme-two .debug-cell:first-child {
+      border-left-width: 2px;
+      border-top-left-radius: 5px;
+      border-bottom-left-radius: 5px;
+    }
+    .theme-two .debug-cell:last-child {
+      border-top-right-radius: 5px;
+      border-bottom-right-radius: 5px;
+    }
+    .theme-two .debug-cell.in-range {
+      border-top-color: var(--debug-two-blue);
+      border-bottom-color: var(--debug-two-blue);
+      background: var(--debug-two-fill);
+    }
+    .theme-two .debug-cell.range-start {
+      border-left-width: 2px;
+      border-left-color: var(--debug-two-blue);
+    }
+    .theme-two .debug-cell.range-end {
+      border-right-color: var(--debug-two-blue);
+    }
+    .theme-two .debug-cell.range-start::before,
+    .theme-two .debug-cell.range-end::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      z-index: 1;
+      width: 0;
+      border-left: 4px solid var(--debug-two-blue);
+      pointer-events: none;
+    }
+    .theme-two .debug-cell.range-start::before { left: -2px; }
+    .theme-two .debug-cell.range-end::after { right: -2px; }
+    .theme-two .debug-cell > strong {
+      min-height: 112px;
+      padding: 22px 12px 10px;
+      color: var(--debug-two-ink);
+      font: 54px var(--vscode-editor-font-family);
+      line-height: 1;
+    }
+    .theme-two .debug-cell > span {
+      top: calc(100% + 14px);
+      color: var(--debug-two-muted);
+      font: 0 var(--vscode-editor-font-family);
+      line-height: 1;
+    }
+    .theme-two .debug-cell > span::before {
+      content: "[" attr(data-index) "]";
+      font-size: 24px;
+    }
+    .theme-two .debug-markers {
+      left: 0;
+      top: 18px;
+      z-index: 2;
+      transform: none;
+    }
+    .theme-two .debug-marker {
+      width: 45px;
+      height: 22px;
+      color: var(--debug-two-blue) !important;
+      background: transparent;
+      border: 0;
+      clip-path: none;
+    }
+    .theme-two .debug-marker::before,
+    .theme-two .debug-marker::after {
+      content: none;
+    }
+    .theme-two .debug-marker-text {
+      display: none;
+    }
+    .theme-two .debug-marker-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section>
+      <p class="caption">主题一：当前卡片式数组</p>
+      <div class="debug-visual">
+        <div class="debug-theme-selector"><button class="active">主题一</button><button>主题二</button></div>
+        <article class="debug-var">
+          <div class="debug-var-head"><div class="debug-var-name">nums</div><div class="debug-var-meta"><span class="debug-var-pill">vector&lt;int&gt;[7]</span></div></div>
+          <div class="debug-var-body">
+            <div class="debug-grid"><div class="debug-grid-cells">
+              <div class="debug-cell"><strong>18</strong><span data-index="0">0</span></div>
+              <div class="debug-cell in-range range-start"><div class="debug-markers"><span class="debug-marker debug-marker-left"><svg class="debug-marker-svg" viewBox="0 0 50 24"><path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="#ffffff" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path><text x="20" y="17" text-anchor="middle" fill="currentColor" font-family="Menlo, Monaco, Consolas, monospace" font-size="17" font-weight="500">L</text></svg><span class="debug-marker-text">L</span></span></div><strong>7</strong><span data-index="1">1</span></div>
+              <div class="debug-cell in-range"><strong>25</strong><span data-index="2">2</span></div>
+              <div class="debug-cell in-range"><div class="debug-markers"><span class="debug-marker debug-marker-mid"><svg class="debug-marker-svg" viewBox="0 0 50 24"><path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path><text x="20" y="17" text-anchor="middle" fill="#ffffff" font-family="Menlo, Monaco, Consolas, monospace" font-size="17" font-weight="500">M</text></svg><span class="debug-marker-text">M</span></span></div><strong>9</strong><span data-index="3">3</span></div>
+              <div class="debug-cell in-range range-end"><div class="debug-markers"><span class="debug-marker debug-marker-right"><svg class="debug-marker-svg" viewBox="0 0 50 24"><path d="M4 1 H32 Q35 1 37 3 L48 12 L37 21 Q35 23 32 23 H4 Q1 23 1 20 V4 Q1 1 4 1 Z" fill="#ffffff" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path><text x="20" y="17" text-anchor="middle" fill="currentColor" font-family="Menlo, Monaco, Consolas, monospace" font-size="17" font-weight="500">R</text></svg><span class="debug-marker-text">R</span></span></div><strong>15</strong><span data-index="4">4</span></div>
+              <div class="debug-cell"><strong>3</strong><span data-index="5">5</span></div>
+              <div class="debug-cell"><strong>-1</strong><span data-index="6">6</span></div>
+            </div></div>
+            <aside class="debug-marker-legend">
+              <div class="debug-marker-legend-item" style="color:#0b66d8"><span class="debug-legend-marker"></span><span>left</span></div>
+              <div class="debug-marker-legend-item" style="color:#d9a300"><span class="debug-legend-marker"></span><span>mid</span></div>
+              <div class="debug-marker-legend-item" style="color:#c40000"><span class="debug-legend-marker"></span><span>right</span></div>
+            </aside>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section>
+      <p class="caption">主题二：连续窗口表格</p>
+      <div class="debug-visual theme-two">
+        <div class="debug-theme-selector"><button>主题一</button><button class="active">主题二</button></div>
+        <article class="debug-var">
+          <div class="debug-var-head"><div class="debug-var-name">nums</div><div class="debug-var-meta"><span class="debug-var-pill">vector&lt;int&gt;[7]</span></div></div>
+          <div class="debug-var-body">
+            <div class="debug-grid"><div class="debug-grid-cells">
+              <div class="debug-cell"><strong>18</strong><span data-index="0">0</span></div>
+              <div class="debug-cell in-range range-start"><div class="debug-markers"><span class="debug-marker debug-marker-left"><span class="debug-marker-text">L</span></span></div><strong>7</strong><span data-index="1">1</span></div>
+              <div class="debug-cell in-range"><strong>25</strong><span data-index="2">2</span></div>
+              <div class="debug-cell in-range"><div class="debug-markers"><span class="debug-marker debug-marker-mid"><span class="debug-marker-text">M</span></span></div><strong>9</strong><span data-index="3">3</span></div>
+              <div class="debug-cell in-range range-end"><div class="debug-markers"><span class="debug-marker debug-marker-right"><span class="debug-marker-text">R</span></span></div><strong>15</strong><span data-index="4">4</span></div>
+              <div class="debug-cell"><strong>3</strong><span data-index="5">5</span></div>
+              <div class="debug-cell"><strong>-1</strong><span data-index="6">6</span></div>
+            </div></div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

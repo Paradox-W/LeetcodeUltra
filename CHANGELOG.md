@@ -1,3 +1,10 @@
+# LeetCodeUltra-v1.0.0-develop-beta
+
+- 首个公测开发版发布命名定为 `LeetCodeUltra-v1.0.0-develop-beta`
+- 扩展清单版本升级到 `1.0.0`
+- 新增浏览器授权登录入口，补齐登录回跳链路
+- 项目整体许可证统一为 `GPL-3.0-only`
+
 # version 3.2.4
 
 - 更新 hot100 题目编号

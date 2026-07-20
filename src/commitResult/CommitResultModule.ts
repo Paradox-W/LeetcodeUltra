@@ -23,6 +23,7 @@ import * as OutputUtils_1 from "../utils/OutputUtils";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
 import * as BABA_1 from "../BABA";
 import * as ConstDefind_1 from "../model/ConstDefind";
+import { companionService } from "../companion/CompanionModule";
 class SubmissionService extends BaseWebviewService_1.BaseWebViewService {
     constructor() {
         super(...arguments);
@@ -65,6 +66,10 @@ class SubmissionService extends BaseWebviewService_1.BaseWebViewService {
         if (tsd != undefined) {
             let qid = (_a = submit_event === null || submit_event === void 0 ? void 0 : submit_event.qid) === null || _a === void 0 ? void 0 : _a.toString();
             this.tempTestCase.set(qid, tsd);
+        }
+        const submitProblemInput = submit_event && submit_event.qid != null ? String(submit_event.qid) : "";
+        if ((submit_event === null || submit_event === void 0 ? void 0 : submit_event.sub_type) === "submit" && submitProblemInput) {
+            void companionService.refreshSubmissionsIfVisible(submitProblemInput);
         }
         this.triggerRaycastConfetti(submit_event);
         BABA_1.BABA.sendNotification(BABA_1.BabaStr.CommitResult_showFinish, submit_event);

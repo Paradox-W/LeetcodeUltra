@@ -1,4 +1,4 @@
-LeetcodeUltra
+LeetCodeUltra-v1.0.0-develop-beta
 
 This extension is derived from ccagml/leetcode-extension, originally published
 as vscode-leetcode-problem-rating by ccagml under the MIT License.

@@ -29,6 +29,56 @@ const requiredExtensionIds = [
   "vadimcn.vscode-lldb",
 ];
 
+async function materializeDatalessFiles(root) {
+  if (!fs.existsSync(root)) {
+    return;
+  }
+  const pending = [root];
+  const datalessFiles = [];
+  let nextFile = 0;
+  let materializedFiles = 0;
+  let materializedBytes = 0;
+  const startedAt = Date.now();
+  while (pending.length) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const entryPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const stat = fs.statSync(entryPath);
+      if (stat.size === 0 || stat.blocks !== 0) {
+        continue;
+      }
+      datalessFiles.push({ path: entryPath, size: stat.size });
+    }
+  }
+  const workerCount = Math.min(12, datalessFiles.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextFile < datalessFiles.length) {
+        const file = datalessFiles[nextFile];
+        nextFile += 1;
+        await fs.promises.readFile(file.path);
+        materializedFiles += 1;
+        materializedBytes += file.size;
+        if (materializedFiles % 250 === 0) {
+          console.log(`Materialized ${materializedFiles}/${datalessFiles.length} cloud-backed dependency files...`);
+        }
+      }
+    })
+  );
+  if (materializedFiles) {
+    console.log(
+      `Materialized ${materializedFiles} cloud-backed dependency files (${Math.ceil(materializedBytes / 1024 / 1024)} MiB, ${Date.now() - startedAt}ms)`
+    );
+  }
+}
+
 function stripJsonComments(text) {
   let result = "";
   let inString = false;
@@ -242,11 +292,18 @@ function syncRequiredExtensions() {
   }
 }
 
-fs.mkdirSync(debugUserDir, { recursive: true });
-fs.mkdirSync(debugExtensions, { recursive: true });
-syncSettings();
-syncGlobalStorage();
-ensureLeetCodeSessions();
-syncRequiredExtensions();
+async function main() {
+  fs.mkdirSync(debugUserDir, { recursive: true });
+  fs.mkdirSync(debugExtensions, { recursive: true });
+  await materializeDatalessFiles(path.join(repoRoot, "node_modules"));
+  syncSettings();
+  syncGlobalStorage();
+  ensureLeetCodeSessions();
+  syncRequiredExtensions();
+  console.log(`Prepared VS Code debug profile: ${debugUserData}`);
+}
 
-console.log(`Prepared VS Code debug profile: ${debugUserData}`);
+main().catch((error) => {
+  console.error(`Failed to prepare VS Code debug profile: ${error.stack || error}`);
+  process.exitCode = 1;
+});

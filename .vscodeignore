@@ -1,6 +1,7 @@
 .vscode/**
 .vscode-test/**
 .codegraph/**
+release/**
 .debug-visualizer-extension-test-result.json
 out/test/**
 test/**

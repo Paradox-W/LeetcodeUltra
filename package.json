@@ -1,8 +1,8 @@
 {
     "name": "leetcodeultra",
-    "displayName": "LeetcodeUltra",
+    "displayName": "LeetCodeUltra-v1.0.0-develop-beta",
     "description": "%main.description%",
-    "version": "3.2.4",
+    "version": "1.0.0",
     "author": "ccagml",
     "publisher": "paradox",
     "license": "GPL-3.0-only",

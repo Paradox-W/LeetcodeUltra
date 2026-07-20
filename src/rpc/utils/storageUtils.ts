@@ -327,7 +327,14 @@ class StorageUtils {
   }
 
   public getData(fullpath) {
-    return fs.existsSync(fullpath) ? fs.readFileSync(fullpath).toString() : null;
+    if (!fs.existsSync(fullpath)) {
+      return null;
+    }
+    const fileStat = fs.statSync(fullpath);
+    if (fileStat.size > 0 && fileStat.blocks === 0) {
+      return null;
+    }
+    return fs.readFileSync(fullpath).toString();
   }
 
   // 获取要提交测试的数据

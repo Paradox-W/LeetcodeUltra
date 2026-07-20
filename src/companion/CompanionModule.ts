@@ -36,6 +36,7 @@ class LeetCodeCompanionProvider {
                 skip: 0,
                 first: 20,
                 loading: false,
+                loadingText: "",
                 error: "",
                 currentLanguageOnly: false,
             },
@@ -51,6 +52,7 @@ class LeetCodeCompanionProvider {
                 noteNotice: undefined,
                 filters: { status: "all", lang: "all", note: "" },
                 loading: false,
+                loadingText: "",
                 error: "",
             },
         };
@@ -400,6 +402,20 @@ ${select(" .hljs-strong")} {
         this.state.submissions.detail = undefined;
         this.revealAndRender(true);
         this.loadSubmissions();
+    }
+    isShowingSubmissionsList() {
+        return this.state.activeTab === "submissions" && !this.state.submissions.detail;
+    }
+    async refreshSubmissionsIfVisible(problemInput) {
+        const currentProblemInput = this.getProblemInput();
+        const expectedProblemInput = String(problemInput || "").trim();
+        if (!expectedProblemInput || !currentProblemInput || expectedProblemInput !== currentProblemInput) {
+            return;
+        }
+        if (!this.isShowingSubmissionsList() || this.state.submissions.loading) {
+            return;
+        }
+        await this.loadSubmissions();
     }
     showSolutions() {
         if (!this.state.node) {
@@ -1127,8 +1143,10 @@ ${select(" .hljs-strong")} {
         }
         const first = state.first || 20;
         const skip = reset ? 0 : (state.list || []).length;
+        const isLoadMore = !reset && skip > 0;
         state.problemInput = problemInput;
         state.loading = true;
+        state.loadingText = isLoadMore ? "正在加载更多题解讨论..." : "正在读取题解讨论...";
         state.error = "";
         if (reset) {
             state.list = [];
@@ -1176,6 +1194,7 @@ ${select(" .hljs-strong")} {
                 return;
             }
             state.loading = false;
+            state.loadingText = "";
             this.state.activeTab = "solution";
             this.revealAndRender(true);
         }
@@ -1193,6 +1212,7 @@ ${select(" .hljs-strong")} {
         }
         state.problemInput = problemInput;
         state.loading = true;
+        state.loadingText = "正在读取题解详情...";
         state.error = "";
         this.state.activeTab = "solution";
         this.revealAndRender(true);
@@ -1220,6 +1240,7 @@ ${select(" .hljs-strong")} {
                 return;
             }
             state.loading = false;
+            state.loadingText = "";
             this.state.activeTab = "solution";
             this.revealAndRender(true);
         }
@@ -1232,6 +1253,7 @@ ${select(" .hljs-strong")} {
             return;
         }
         this.state.submissions.loading = true;
+        this.state.submissions.loadingText = "正在读取提交记录...";
         this.state.submissions.error = "";
         this.state.submissions.detail = undefined;
         this.revealAndRender(true);
@@ -1251,6 +1273,7 @@ ${select(" .hljs-strong")} {
         }
         finally {
             this.state.submissions.loading = false;
+            this.state.submissions.loadingText = "";
             this.state.activeTab = "submissions";
             this.revealAndRender(true);
         }
@@ -1262,6 +1285,7 @@ ${select(" .hljs-strong")} {
             return;
         }
         this.state.submissions.loading = true;
+        this.state.submissions.loadingText = "正在读取提交详情...";
         this.state.submissions.error = "";
         this.revealAndRender(true);
         try {
@@ -1278,6 +1302,7 @@ ${select(" .hljs-strong")} {
         }
         finally {
             this.state.submissions.loading = false;
+            this.state.submissions.loadingText = "";
             this.state.activeTab = "submissions";
             this.revealAndRender(true);
         }
@@ -1708,7 +1733,7 @@ ${select(" .hljs-strong")} {
             const client = url.protocol === "http:" ? http : https;
             const request = client.get(url, {
                 headers: {
-                    "User-Agent": "LeetcodeUltra/3.2.4",
+                    "User-Agent": "LeetCodeUltra-v1.0.0-develop-beta",
                     "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
                 },
             }, (response) => {
@@ -2048,12 +2073,160 @@ ${select(" .hljs-strong")} {
       window.setTimeout(applyBackgroundAwareImages, 0);
     }
     applyBackgroundAwareImages();
-    new MutationObserver((records) => {
-      if (records.some((record) => record.attributeName === 'class')) {
-        resetBackgroundAwareImages();
-      }
-    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    const noteSearch = document.querySelector('[data-submission-note-search]');
+	    new MutationObserver((records) => {
+	      if (records.some((record) => record.attributeName === 'class')) {
+	        resetBackgroundAwareImages();
+	      }
+	    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+	    const OVERLAY_SCROLL_SELECTOR = '.solution-language-tablist, .submission-filter-menu, .submission-section textarea, .katex-display, .lcpr-math-fallback, .lcpr-markdown table';
+	    let overlayScrollbar;
+	    let overlayScrollbarThumb;
+	    let overlayScrollbarTarget;
+	    let overlayScrollbarAxis = 'y';
+	    let overlayScrollbarTimer = 0;
+	    function ensureOverlayScrollbar() {
+	      if (overlayScrollbar && overlayScrollbarThumb) {
+	        return overlayScrollbar;
+	      }
+	      overlayScrollbar = document.createElement('div');
+	      overlayScrollbar.className = 'lcpr-overlay-scrollbar';
+	      overlayScrollbar.setAttribute('aria-hidden', 'true');
+	      overlayScrollbarThumb = document.createElement('span');
+	      overlayScrollbarThumb.className = 'lcpr-overlay-scrollbar-thumb';
+	      overlayScrollbar.appendChild(overlayScrollbarThumb);
+	      document.body.appendChild(overlayScrollbar);
+	      return overlayScrollbar;
+	    }
+	    function getDocumentScroller() {
+	      return document.scrollingElement || document.documentElement || document.body;
+	    }
+	    function isDocumentScroller(target) {
+	      const scroller = getDocumentScroller();
+	      return target === window || target === document || target === scroller || target === document.documentElement || target === document.body;
+	    }
+	    function overlayMetrics(target, axis) {
+	      const docTarget = isDocumentScroller(target);
+	      const scroller = docTarget ? getDocumentScroller() : target;
+	      const rect = docTarget
+	        ? { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0, width: window.innerWidth, height: window.innerHeight }
+	        : scroller.getBoundingClientRect();
+	      const clientSize = docTarget
+	        ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+	        : (axis === 'y' ? scroller.clientHeight : scroller.clientWidth);
+	      const scrollSize = axis === 'y' ? scroller.scrollHeight : scroller.scrollWidth;
+	      const scrollPos = axis === 'y'
+	        ? (docTarget ? window.scrollY || scroller.scrollTop || 0 : scroller.scrollTop)
+	        : (docTarget ? window.scrollX || scroller.scrollLeft || 0 : scroller.scrollLeft);
+	      return {
+	        rect,
+	        clientSize,
+	        scrollSize,
+	        scrollPos,
+	        maxScroll: Math.max(0, scrollSize - clientSize),
+	      };
+	    }
+	    function resolveOverlayAxis(target) {
+	      const y = overlayMetrics(target, 'y');
+	      if (y.maxScroll > 1) return 'y';
+	      const x = overlayMetrics(target, 'x');
+	      return x.maxScroll > 1 ? 'x' : '';
+	    }
+	    function hideOverlayScrollbar() {
+	      clearTimeout(overlayScrollbarTimer);
+	      overlayScrollbarTimer = 0;
+	      if (overlayScrollbar) {
+	        overlayScrollbar.classList.remove('is-visible');
+	      }
+	      overlayScrollbarTarget = undefined;
+	    }
+	    function syncOverlayScrollbar(target, preferredAxis) {
+	      const nextTarget = target || overlayScrollbarTarget;
+	      if (!nextTarget) {
+	        return false;
+	      }
+	      const axis = preferredAxis || overlayScrollbarAxis || resolveOverlayAxis(nextTarget);
+	      if (!axis) {
+	        hideOverlayScrollbar();
+	        return false;
+	      }
+	      const metrics = overlayMetrics(nextTarget, axis);
+	      if (metrics.maxScroll <= 1 || metrics.clientSize <= 0 || metrics.scrollSize <= 0) {
+	        hideOverlayScrollbar();
+	        return false;
+	      }
+	      const bar = ensureOverlayScrollbar();
+	      const thumb = overlayScrollbarThumb;
+	      const inset = 4;
+	      if (axis === 'y') {
+	        const top = Math.max(inset, metrics.rect.top + inset);
+	        const bottom = Math.min(window.innerHeight - inset, metrics.rect.bottom - inset);
+	        const height = Math.max(0, bottom - top);
+	        const left = Math.min(window.innerWidth - 6, Math.max(2, metrics.rect.right - 7));
+	        if (height < 18 || metrics.rect.right < 4 || metrics.rect.left > window.innerWidth - 4) {
+	          hideOverlayScrollbar();
+	          return false;
+	        }
+	        const thumbHeight = Math.min(height, Math.max(24, Math.round(metrics.clientSize / metrics.scrollSize * height)));
+	        const thumbTop = Math.round(metrics.scrollPos / metrics.maxScroll * Math.max(0, height - thumbHeight));
+	        bar.className = 'lcpr-overlay-scrollbar is-vertical';
+	        bar.style.display = 'block';
+	        bar.style.top = top + 'px';
+	        bar.style.left = left + 'px';
+	        bar.style.width = '4px';
+	        bar.style.height = height + 'px';
+	        thumb.style.width = '4px';
+	        thumb.style.height = thumbHeight + 'px';
+	        thumb.style.transform = 'translateY(' + thumbTop + 'px)';
+	      } else {
+	        const left = Math.max(inset, metrics.rect.left + inset);
+	        const right = Math.min(window.innerWidth - inset, metrics.rect.right - inset);
+	        const width = Math.max(0, right - left);
+	        const top = Math.min(window.innerHeight - 6, Math.max(2, metrics.rect.bottom - 7));
+	        if (width < 18 || metrics.rect.bottom < 4 || metrics.rect.top > window.innerHeight - 4) {
+	          hideOverlayScrollbar();
+	          return false;
+	        }
+	        const thumbWidth = Math.min(width, Math.max(24, Math.round(metrics.clientSize / metrics.scrollSize * width)));
+	        const thumbLeft = Math.round(metrics.scrollPos / metrics.maxScroll * Math.max(0, width - thumbWidth));
+	        bar.className = 'lcpr-overlay-scrollbar is-horizontal';
+	        bar.style.display = 'block';
+	        bar.style.top = top + 'px';
+	        bar.style.left = left + 'px';
+	        bar.style.width = width + 'px';
+	        bar.style.height = '4px';
+	        thumb.style.width = thumbWidth + 'px';
+	        thumb.style.height = '4px';
+	        thumb.style.transform = 'translateX(' + thumbLeft + 'px)';
+	      }
+	      overlayScrollbarTarget = nextTarget;
+	      overlayScrollbarAxis = axis;
+	      return true;
+	    }
+	    function showOverlayScrollbar(target, preferredAxis) {
+	      const nextTarget = target || getDocumentScroller();
+	      const axis = preferredAxis || resolveOverlayAxis(nextTarget);
+	      if (!axis || !syncOverlayScrollbar(nextTarget, axis)) {
+	        return;
+	      }
+	      ensureOverlayScrollbar().classList.add('is-visible');
+	      clearTimeout(overlayScrollbarTimer);
+	      overlayScrollbarTimer = setTimeout(() => {
+	        if (overlayScrollbar) {
+	          overlayScrollbar.classList.remove('is-visible');
+	        }
+	      }, 650);
+	    }
+	    window.addEventListener('scroll', () => showOverlayScrollbar(getDocumentScroller(), 'y'), { passive: true });
+	    window.addEventListener('resize', () => syncOverlayScrollbar(), { passive: true });
+	    document.addEventListener('scroll', (event) => {
+	      const target = event.target;
+	      if (isDocumentScroller(target)) {
+	        showOverlayScrollbar(getDocumentScroller(), 'y');
+	      } else if (target && target.matches && target.matches(OVERLAY_SCROLL_SELECTOR)) {
+	        showOverlayScrollbar(target);
+	      }
+	    }, true);
+	    const noteSearch = document.querySelector('[data-submission-note-search]');
     function normalizeClientSearch(value) {
       return String(value || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
     }
@@ -2217,10 +2390,11 @@ ${select(" .hljs-strong")} {
     function autosizeSubmissionNote(textarea) {
       if (!textarea) return;
       textarea.style.height = 'auto';
-      const next = Math.min(Math.max(textarea.scrollHeight, 60), 220);
-      textarea.style.height = next + 'px';
-      textarea.style.overflowY = textarea.scrollHeight > 220 ? 'auto' : 'hidden';
-    }
+	      const next = Math.min(Math.max(textarea.scrollHeight, 60), 220);
+	      textarea.style.height = next + 'px';
+	      textarea.style.overflowY = textarea.scrollHeight > 220 ? 'auto' : 'hidden';
+	      syncOverlayScrollbar(textarea);
+	    }
     document.querySelectorAll('[data-submission-note]').forEach(autosizeSubmissionNote);
     document.addEventListener('input', (event) => {
       if (event.target && event.target.matches('[data-submission-note]')) {
@@ -2721,8 +2895,8 @@ ${select(" .hljs-strong")} {
         const emptyHint = followingOnly
             ? followedCount ? "可以切回全部，或先在详情页关注更多作者。" : "点击作者旁的关注按钮后，这里会只显示已关注作者。"
             : currentOnly ? "可以取消语言筛选，或加载更多题解讨论。" : "力扣中文站没有返回本题的题解讨论。";
-        const rowsMarkup = visibleList.length ? `<div class="solution-rows">${visibleList.map((item) => this.renderSolutionRow(item)).join("")}</div>` : "";
-        const loadingMarkup = state.loading ? `<div class="lcpr-loading solution-list-loading">${visibleList.length ? "正在加载更多题解讨论..." : "正在读取题解讨论..."}</div>` : "";
+        const rowsMarkup = !state.loading && visibleList.length ? `<div class="solution-rows">${visibleList.map((item) => this.renderSolutionRow(item)).join("")}</div>` : "";
+        const loadingMarkup = state.loading ? `<div class="lcpr-loading solution-list-loading">${this.escapeHtml(state.loadingText || "正在读取题解讨论...")}</div>` : "";
         const emptyMarkup = !visibleList.length && !state.loading ? `<div class="lcpr-empty compact"><div class="lcpr-empty-title">${emptyTitle}</div><p>${emptyHint}</p></div>` : "";
         return `<article class="lcpr-pane lcpr-solutions">
   ${state.error ? `<div class="lcpr-callout lcpr-error">${this.escapeHtml(state.error)}</div>` : ""}
@@ -2745,7 +2919,7 @@ ${select(" .hljs-strong")} {
 	    ${rowsMarkup}
 	    ${loadingMarkup}
 	    ${emptyMarkup}
-	    ${canLoadMore ? `<button class="lcpr-action-button solution-more" data-command="loadMoreSolutions">加载更多</button>` : ""}
+	    ${!state.loading && canLoadMore ? `<button class="lcpr-action-button solution-more" data-command="loadMoreSolutions">加载更多</button>` : ""}
 	  </section>
 </article>`;
     }
@@ -2835,7 +3009,6 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
         const detail = submissions.detail;
         return `<article class="lcpr-pane lcpr-submissions">
   ${submissions.error ? `<div class="lcpr-callout lcpr-error">${this.escapeHtml(submissions.error)}</div>` : ""}
-  ${submissions.loading ? `<div class="lcpr-loading">正在读取提交记录...</div>` : ""}
   ${detail ? this.renderSubmissionDetail(detail) : this.renderSubmissionList()}
 </article>`;
     }
@@ -2873,6 +3046,7 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
         const submissions = this.state.submissions;
         const list = submissions.list || [];
         const filtered = this.filteredSubmissions();
+        const loadingMarkup = submissions.loading ? `<div class="lcpr-loading solution-list-loading">${this.escapeHtml(submissions.loadingText || "正在读取提交记录...")}</div>` : "";
         const statusValue = (submissions.filters && submissions.filters.status) || "all";
         const langValue = (submissions.filters && submissions.filters.lang) || "all";
         const statusItems = [
@@ -2897,10 +3071,12 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
     ${this.renderSubmissionLanguageFilter(langValue, langItems)}
   </div>
   <label class="submission-note-search">
-    <span>备注搜索</span>
-    <input type="text" role="searchbox" autocomplete="off" autocorrect="off" spellcheck="false" data-submission-note-search>
+    <input type="text" role="searchbox" aria-label="备注搜索" placeholder="备注搜索" autocomplete="off" autocorrect="off" spellcheck="false" data-submission-note-search>
+    <span class="submission-note-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span>
   </label>
-  ${filtered.length ? `<div class="submission-rows" data-submission-rows>${filtered.map((item, index) => this.renderSubmissionRow(item, index)).join("")}</div><div class="lcpr-empty compact submission-search-empty" data-submission-note-empty hidden><div class="lcpr-empty-title">没有匹配的备注</div><p>换一个关键词试试。</p></div>` : `<div class="lcpr-empty compact"><div class="lcpr-empty-title">暂无提交</div><p>当前筛选条件下没有提交记录。</p></div>`}
+  ${!submissions.loading && filtered.length ? `<div class="submission-rows" data-submission-rows>${filtered.map((item, index) => this.renderSubmissionRow(item, index)).join("")}</div><div class="lcpr-empty compact submission-search-empty" data-submission-note-empty hidden><div class="lcpr-empty-title">没有匹配的备注</div><p>换一个关键词试试。</p></div>` : ""}
+  ${!submissions.loading && !filtered.length ? `<div class="lcpr-empty compact"><div class="lcpr-empty-title">暂无提交</div><p>当前筛选条件下没有提交记录。</p></div>` : ""}
+  ${loadingMarkup}
 </section>`;
     }
     renderSubmissionStatusSegments(currentValue, items) {
@@ -3639,9 +3815,10 @@ ${hints.map((hint, index) => `<details class="lcpr-hint" ${index === 0 ? "open" 
 	  --lcpr-code-bg: var(--vscode-textCodeBlock-background, var(--vscode-editor-inactiveSelectionBackground));
   --lcpr-reading-font-size: var(--vscode-font-size, 13px);
   --lcpr-success-deep: #137333;
-  --lcpr-success: #2ea043;
-  --lcpr-focus-gray: #b7b7b7;
-}
+	  --lcpr-success: #2ea043;
+	  --lcpr-focus-gray: #b7b7b7;
+	  --lcpr-scrollbar-thumb: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, .62));
+	}
 body.vscode-dark {
   --lcpr-success-deep: #2ea043;
   --lcpr-success: #3fb950;
@@ -3669,8 +3846,70 @@ html, body {
   font-size: var(--vscode-font-size, 13px);
   line-height: 1.48;
 }
-body { overflow-x: hidden; }
-.lcpr-svg-filters {
+	body { overflow-x: hidden; }
+	html,
+	body,
+	.solution-language-tablist,
+	.submission-filter-menu,
+	.submission-section textarea,
+	.katex-display,
+	.lcpr-math-fallback,
+	.lcpr-markdown table {
+	  scrollbar-width: none;
+	  scrollbar-gutter: auto;
+	}
+	html::-webkit-scrollbar,
+	body::-webkit-scrollbar,
+	.solution-language-tablist::-webkit-scrollbar,
+	.submission-filter-menu::-webkit-scrollbar,
+	.submission-section textarea::-webkit-scrollbar,
+	.katex-display::-webkit-scrollbar,
+	.lcpr-math-fallback::-webkit-scrollbar,
+	.lcpr-markdown table::-webkit-scrollbar {
+	  width: 0;
+	  height: 0;
+	  background: transparent;
+	}
+	html::-webkit-scrollbar-track,
+	body::-webkit-scrollbar-track,
+	.solution-language-tablist::-webkit-scrollbar-track,
+	.submission-filter-menu::-webkit-scrollbar-track,
+	.submission-section textarea::-webkit-scrollbar-track,
+	.katex-display::-webkit-scrollbar-track,
+	.lcpr-math-fallback::-webkit-scrollbar-track,
+	.lcpr-markdown table::-webkit-scrollbar-track {
+	  background: transparent;
+	}
+	.lcpr-overlay-scrollbar {
+	  position: fixed;
+	  z-index: 30;
+	  display: none;
+	  pointer-events: none;
+	  opacity: 0;
+	  transition: opacity 120ms ease;
+	  contain: strict;
+	}
+	.lcpr-overlay-scrollbar.is-visible {
+	  opacity: 1;
+	}
+	.lcpr-overlay-scrollbar-thumb {
+	  position: absolute;
+	  top: 0;
+	  left: 0;
+	  min-width: 24px;
+	  min-height: 24px;
+	  border-radius: 999px;
+	  background: var(--lcpr-scrollbar-thumb);
+	}
+	.lcpr-overlay-scrollbar.is-vertical .lcpr-overlay-scrollbar-thumb {
+	  min-width: 0;
+	  width: 4px;
+	}
+	.lcpr-overlay-scrollbar.is-horizontal .lcpr-overlay-scrollbar-thumb {
+	  min-height: 0;
+	  height: 4px;
+	}
+	.lcpr-svg-filters {
   position: absolute;
   width: 0;
   height: 0;
@@ -3785,8 +4024,8 @@ h1 a:hover, h1 a:focus, h1 a:active {
 }
 .lcpr-lang-segment button:focus,
 .lcpr-lang-segment button:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: none;
 }
 .lcpr-lang-segment button:active {
   transform: translateY(1px);
@@ -3822,8 +4061,8 @@ h1 a:hover, h1 a:focus, h1 a:active {
 }
 .lcpr-font-button:focus,
 .lcpr-font-button:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: none;
 }
 .lcpr-font-button:active {
   transform: translateY(1px);
@@ -5000,21 +5239,19 @@ body.vscode-high-contrast .lcpr-markdown img {
 }
 .submission-note-search {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   height: 34px;
-  padding: 0 10px;
+  padding: 0 10px 0 12px;
   border: 1px solid var(--vscode-input-border, var(--lcpr-border));
   border-radius: 4px;
   background: var(--lcpr-input);
 }
-.submission-note-search span {
-  color: var(--lcpr-muted);
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
+.submission-note-search:focus-within {
+  border-color: color-mix(in srgb, var(--lcpr-muted) 58%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lcpr-muted) 42%, transparent);
 }
 .submission-note-search input {
   min-width: 0;
@@ -5025,10 +5262,23 @@ body.vscode-high-contrast .lcpr-markdown img {
   outline: none;
   font: inherit;
   font-size: 13px;
-  text-align: right;
+  text-align: left;
 }
 .submission-note-search input::placeholder {
   color: var(--vscode-input-placeholderForeground, var(--lcpr-muted));
+}
+.submission-note-search-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--lcpr-muted);
+  pointer-events: none;
+}
+.submission-note-search-icon svg {
+  width: 14px;
+  height: 14px;
 }
 .submission-rows {
   display: flex;

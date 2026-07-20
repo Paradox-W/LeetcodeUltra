@@ -1,6 +1,6 @@
-# LeetcodeUltra
+# LeetCodeUltra-v1.0.0-develop-beta
 
-LeetcodeUltra 是一个面向高频刷题、复盘和本地调试重新设计的 VS Code LeetCode 助手。
+LeetCodeUltra-v1.0.0-develop-beta 是一个面向高频刷题、复盘和本地调试重新设计的 VS Code LeetCode 助手。
 
 它不是只把题目拉到编辑器里，而是把题目阅读、测试用例、运行结果、提交记录、性能分布、备注和 C++ 调试整理成一条连续的工作流。你可以在 VS Code 里打开题目、编辑代码、管理用例、查看提交历史、复盘错误版本，并在需要时启动本地调试。
 
@@ -117,7 +117,7 @@ LeetcodeUltra 保留并增强了原项目的题单能力，适合按难度、标
 
 ## 与原始插件的关系
 
-LeetcodeUltra 是基于 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 的派生增强版本，并使用独立扩展身份发布。
+LeetCodeUltra-v1.0.0-develop-beta 是基于 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 的派生增强版本，并使用独立扩展身份发布。
 
 本项目当前整体以 `GPL-3.0-only` 分发；同时保留上游 `ccagml/leetcode-extension` 的 MIT 归属说明，以及仓库内第三方组件各自的许可证与声明。在此基础上，LeetcodeUltra 对 UI、控制台、提交记录、性能展示、右侧助手和 C++ 调试体验做了较大幅度的产品化改造。
 

@@ -158,7 +158,7 @@ function syncSettings() {
   merged["leetcode-problem-rating.workspaceFolder"] = leetcodeWorkspace;
   merged["leetcode.defaultLanguage"] = merged["leetcode.defaultLanguage"] || "cpp";
   merged["leetcode-problem-rating.defaultLanguage"] = merged["leetcode-problem-rating.defaultLanguage"] || "cpp";
-  merged["leetcode-problem-rating.useVscodeNode"] = false;
+  merged["leetcode-problem-rating.useVscodeNode"] = true;
   merged["leetcode-problem-rating.nodePath"] = merged["leetcode-problem-rating.nodePath"] || "node";
   writeJson(debugSettingsPath, merged);
 }

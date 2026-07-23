@@ -284,7 +284,7 @@ export class TreeNodeModel {
 
   public get viewItem(): string {
     if (this.isProblem) {
-      return `leaf#${this.nodeType}#`
+      return `leaf#${this.nodeType}#${this.isFavorite ? "fav-on" : "fav-off"}`
     }
     return `cc#${this.nodeType}#`
   }  // rank分

@@ -43,6 +43,39 @@ function buildUsCookieHeaders(cookie, sessionCSRF) {
         Accept: configUtils_1.configUtils.sys.my_headers.Accept,
     };
 }
+function normalizeCookieHeader(cookie) {
+    const normalizedCookie = String(cookie || "").trim();
+    if (!normalizedCookie) {
+        return "";
+    }
+    return normalizedCookie.endsWith(";") ? normalizedCookie : `${normalizedCookie};`;
+}
+function getCookieValue(cookie, key) {
+    const match = String(cookie || "").match(new RegExp(`${key}=([^;]+)`));
+    return match ? match[1] : "";
+}
+function getFavoriteFolder(favorites) {
+    const privateFavorites = favorites === null || favorites === void 0 ? void 0 : favorites.favorites;
+    const folders = privateFavorites && Array.isArray(privateFavorites.private_favorites)
+        ? privateFavorites.private_favorites
+        : undefined;
+    if (!folders) {
+        return null;
+    }
+    return folders.find((favorite) => favorite && favorite.name === "Favorite" && favorite.id_hash) || null;
+}
+function getGraphQLError(body, operationName) {
+    var _a, _b, _c;
+    const payload = (_a = body === null || body === void 0 ? void 0 : body.data) === null || _a === void 0 ? void 0 : _a[operationName];
+    if (payload && payload.ok) {
+        return null;
+    }
+    const message = ((_c = (_b = body === null || body === void 0 ? void 0 : body.errors) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) || (payload === null || payload === void 0 ? void 0 : payload.error) || `${operationName} failed`;
+    return {
+        msg: message,
+        statusCode: -1,
+    };
+}
 class LeetCode extends chainNodeBase_1.ChainNodeBase {
     constructor() {
         super();
@@ -669,6 +702,13 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
         /* A function that is used to star a problem. */
         this.starProblem = (problem, starred, cb) => {
             const user = sessionUtils_1.sessionUtils.getUser();
+            if (!(user === null || user === void 0 ? void 0 : user.hash)) {
+                return cb({
+                    msg: "favorite list unavailable, please login again",
+                    statusCode: -1,
+                    code: -1000,
+                });
+            }
             const operationName = starred ? "addQuestionToFavorite" : "removeQuestionFromFavorite";
             const opts = makeOpts(configUtils_1.configUtils.sys.urls.graphql);
             opts.headers.Origin = configUtils_1.configUtils.sys.urls.base;
@@ -680,21 +720,26 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                 operationName: operationName,
             };
             if (configUtils_1.configUtils.isCN()) {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                request.post(opts, function (e, resp, _) {
+                request.post(opts, function (e, resp, body) {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
+                    const graphqlError = getGraphQLError(body, operationName);
+                    if (graphqlError)
+                        return cb(graphqlError);
                     return cb(null, starred);
                 });
             }
             else {
                 opts.json = opts.body;
                 delete opts.body;
-                this.h2request.post(opts, function (e, resp, _) {
+                this.h2request.post(opts, function (e, resp, body) {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
+                    const graphqlError = getGraphQLError(body, operationName);
+                    if (graphqlError)
+                        return cb(graphqlError);
                     return cb(null, starred);
                 });
             }
@@ -776,6 +821,12 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
+                    if (!favorites || !Array.isArray(favorites === null || favorites === void 0 ? void 0 : favorites.favorites?.private_favorites)) {
+                        return cb("LeetCode returned an invalid favorites response.");
+                    }
+                    if (String((favorites === null || favorites === void 0 ? void 0 : favorites.user_name) || "").length === 0) {
+                        return cb(sessionUtils_1.sessionUtils.errors.EXPIRED);
+                    }
                     return cb(null, favorites);
                 });
             }
@@ -784,7 +835,19 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
-                    const favorites = JSON.parse(body);
+                    let favorites;
+                    try {
+                        favorites = typeof body === "string" ? JSON.parse(body) : body;
+                    }
+                    catch (_) {
+                        return cb("LeetCode returned an invalid favorites response.");
+                    }
+                    if (!favorites || !Array.isArray(favorites === null || favorites === void 0 ? void 0 : favorites.favorites?.private_favorites)) {
+                        return cb("LeetCode returned an invalid favorites response.");
+                    }
+                    if (String((favorites === null || favorites === void 0 ? void 0 : favorites.user_name) || "").length === 0) {
+                        return cb(sessionUtils_1.sessionUtils.errors.EXPIRED);
+                    }
                     return cb(null, favorites);
                 });
             }
@@ -804,7 +867,10 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
-                    const user = body.data.user;
+                    const user = body === null || body === void 0 ? void 0 : body.data?.user;
+                    if (!String((user === null || user === void 0 ? void 0 : user.username) || "").trim()) {
+                        return cb(sessionUtils_1.sessionUtils.errors.EXPIRED);
+                    }
                     return cb(null, user);
                 });
             }
@@ -815,7 +881,10 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
                     e = checkError(e, resp, 200);
                     if (e)
                         return cb(e);
-                    const user = body.data.user;
+                    const user = body === null || body === void 0 ? void 0 : body.data?.user;
+                    if (!String((user === null || user === void 0 ? void 0 : user.username) || "").trim()) {
+                        return cb(sessionUtils_1.sessionUtils.errors.EXPIRED);
+                    }
                     return cb(null, user);
                 });
             }
@@ -1003,25 +1072,24 @@ class LeetCode extends chainNodeBase_1.ChainNodeBase {
         this.getUser = (user, cb) => {
             let that = this;
             this.getFavorites(function (e, favorites) {
-                if (!e) {
-                    const f = favorites.favorites.private_favorites.find((f) => f.name === "Favorite");
-                    if (f) {
-                        user.hash = f.id_hash;
-                        user.name = favorites.user_name;
-                    }
-                    else {
-                        // reply.warn("Favorite not found?");
-                    }
+                if (e) {
+                    return cb(e);
                 }
-                else {
-                    // return cb(e);
-                    // reply.warn("Failed to retrieve user favorites: " + e);
+                const favoriteFolder = getFavoriteFolder(favorites);
+                if (!favoriteFolder) {
+                    return cb({
+                        msg: "favorite list unavailable, please login again",
+                        statusCode: -1,
+                        code: -1000,
+                    });
                 }
+                user.hash = favoriteFolder.id_hash;
+                user.name = favorites.user_name;
                 that.getUserInfo(function (e, _user) {
-                    if (!e) {
-                        user.paid = _user.isCurrentUserPremium;
-                        user.name = _user.username;
-                    }
+                    if (e)
+                        return cb(e);
+                    user.paid = _user.isCurrentUserPremium;
+                    user.name = _user.username;
                     sessionUtils_1.sessionUtils.saveUser(user);
                     return cb(null, user);
                 });
@@ -1459,14 +1527,25 @@ function makeOpts(url) {
     return opts;
 }
 function signOpts(opts, user) {
+    user = user || {};
+    opts.headers = opts.headers || {};
     if (user.my_us_header) {
         opts.headers = user.my_us_header;
         return;
     }
-    opts.headers.Cookie = "LEETCODE_SESSION=" + user.sessionId + ";csrftoken=" + user.sessionCSRF + ";";
-    opts.headers["X-CSRFToken"] = user.sessionCSRF;
+    const normalizedCookie = normalizeCookieHeader(user.cookie);
+    const sessionCSRF = user.sessionCSRF || getCookieValue(normalizedCookie, "csrftoken");
+    if (normalizedCookie) {
+        opts.headers.Cookie = normalizedCookie;
+    }
+    else {
+        opts.headers.Cookie = "LEETCODE_SESSION=" + (user.sessionId || "") + ";csrftoken=" + (sessionCSRF || "") + ";";
+    }
+    if (sessionCSRF) {
+        opts.headers["X-CSRFToken"] = sessionCSRF;
+        opts.headers["x-csrftoken"] = sessionCSRF;
+    }
     opts.headers["X-Requested-With"] = "XMLHttpRequest";
-    opts.headers["x-csrftoken"] = user.sessionCSRF;
     opts.headers['User-Agent'] = configUtils_1.configUtils.sys.my_headers.User_Agent;
     opts.headers['Referer'] = configUtils_1.configUtils.sys.my_headers.Referer;
     opts.headers['Origin'] = configUtils_1.configUtils.sys.my_headers.Origin;

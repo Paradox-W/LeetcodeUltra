@@ -164,9 +164,20 @@ class UserApi extends ApiBase {
     } else {
       // show current user
       user = sessionUtils.getUser();
-      if (user) {
-        reply.info(JSON.stringify({ code: 100, user_name: user.name || user.login || "username" }));
-      } else return reply.info(JSON.stringify({ code: -7, msg: "You are not login yet?" }));
+      if (!user) return reply.info(JSON.stringify({ code: -7, msg: "You are not login yet?" }));
+      const chain: any = chainMgr.getChainHead();
+      if (!chain || typeof chain.getUser !== "function") {
+        return reply.info(JSON.stringify({ code: -8, msg: "User validation is unavailable." }));
+      }
+      chain.getUser(user, function (e, validatedUser) {
+        if (e) {
+          if (e.code === sessionUtils.errors.EXPIRED.code) {
+            chain.logout(user, true);
+          }
+          return reply.info(JSON.stringify({ code: -8, msg: e.msg || e }));
+        }
+        reply.info(JSON.stringify({ code: 100, user_name: validatedUser.name || validatedUser.login || "username" }));
+      });
     }
   }
 }

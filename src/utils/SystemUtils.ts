@@ -206,7 +206,13 @@ export async function sysCall(
     let result: string = "";
     let stderrResult: string = "";
     let childProc: cp.ChildProcess;
-    if (useVscodeNode() && command == "node") {
+    const shouldForkNodeScript =
+      command === "node" &&
+      !useWsl() &&
+      args.length > 0 &&
+      typeof args[0] === "string" &&
+      !args[0].startsWith("-");
+    if (shouldForkNodeScript) {
       let newargs: string[] = [];
       command = args[0];
       for (let arg_index = 1; arg_index < args.length; arg_index++) {

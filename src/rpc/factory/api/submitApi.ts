@@ -219,7 +219,8 @@ class SubmitApi extends apiBase_1.ApiBase {
                 log_obj.system_message.lang = result.lang;
                 log_obj.system_message.runtime_percentile = result.runtime_percentile;
                 log_obj.system_message.memory_percentile = result.memory_percentile;
-                log_obj.system_message.submission_id = result.submission_id || result.id || "";
+				log_obj.system_message.submission_id = result.submission_id || result.id || "";
+				log_obj.system_message.submittedAt = new Date().toISOString();
                 that.printResult(result, "state", log_obj);
                 that.printLine(log_obj, result, "%d/%d cases passed (%s)", result.passed, result.total, result.runtime);
                 const finish = () => {

@@ -283,6 +283,9 @@ export interface ISubmitEvent {
   id: string;
   sub_type: string; // test  submit
   accepted: boolean;
+  submission_id?: string;
+  status?: string;
+  submittedAt?: string;
 }
 
 export class RemarkComment implements Comment {

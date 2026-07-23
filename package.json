@@ -1,8 +1,8 @@
 {
     "name": "leetcodeultra",
-    "displayName": "LeetCodeUltra-v1.0.0-develop-beta",
+    "displayName": "LeetCodeUltra-v1.1.0-develop-beta",
     "description": "%main.description%",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "author": "ccagml",
     "publisher": "paradox",
     "license": "GPL-3.0-only",
@@ -60,8 +60,15 @@
         "onCommand:lcpr.aiDebug.setManualVariables",
         "onCommand:lcpr.aiDebug.setMaxVariables",
         "onCommand:lcpr.aiDebug.setVisualTheme",
+        "onView:LCPRLoginView",
         "onView:LCPRWorkbench",
-        "onView:LCPRCompanionView"
+        "onView:LCPRCompanionView",
+        "onView:LCPRStudyPlanView",
+        "onCommand:lcpr.studyPlan.open",
+        "onCommand:lcpr.studyPlan.createOrResume",
+        "onCommand:lcpr.studyPlan.pause",
+        "onCommand:lcpr.studyPlan.refresh",
+        "onCommand:lcpr.studyPlan.reset"
     ],
     "main": "./out/src/extension",
     "contributes": {
@@ -86,7 +93,8 @@
             {
                 "command": "lcpr.signout",
                 "title": "%main.contributes.commands.lcpr.signout.title%",
-                "category": "LeetCode"
+                "category": "LeetCode",
+                "icon": "$(sign-out)"
             },
             {
                 "command": "lcpr.refresh",
@@ -386,6 +394,36 @@
                 "title": "%main.contributes.commands.lcpr.aiDebug.setVisualTheme.title%",
                 "category": "LeetCode",
                 "icon": "$(color-mode)"
+            },
+            {
+                "command": "lcpr.studyPlan.open",
+                "title": "打开学习计划",
+                "category": "LeetCode",
+                "icon": "$(book)"
+            },
+            {
+                "command": "lcpr.studyPlan.createOrResume",
+                "title": "创建或继续学习计划",
+                "category": "LeetCode",
+                "icon": "$(play)"
+            },
+            {
+                "command": "lcpr.studyPlan.pause",
+                "title": "暂停或恢复学习计划",
+                "category": "LeetCode",
+                "icon": "$(debug-pause)"
+            },
+            {
+                "command": "lcpr.studyPlan.refresh",
+                "title": "刷新学习计划",
+                "category": "LeetCode",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "lcpr.studyPlan.reset",
+                "title": "重置学习计划",
+                "category": "LeetCode",
+                "icon": "$(trash)"
             }
         ],
         "viewsContainers": {
@@ -414,12 +452,26 @@
         "views": {
             "lcpr_bar": [
                 {
+                    "id": "LCPRLoginView",
+                    "name": "登录",
+                    "type": "webview",
+                    "when": "!leetcodeUltra.signedIn"
+                },
+                {
+                    "id": "LCPRStudyPlanView",
+                    "name": "科学学习计划",
+                    "type": "webview",
+                    "when": "leetcodeUltra.signedIn"
+                },
+                {
                     "id": "QuestionExplorer",
-                    "name": "%main.contributes.views.lcpr_bar.QuestionExplorer.name%"
+                    "name": "%main.contributes.views.lcpr_bar.QuestionExplorer.name%",
+                    "when": "leetcodeUltra.signedIn"
                 },
                 {
                     "id": "BricksExplorer",
-                    "name": "%main.contributes.views.lcpr_bar.BricksExplorer.name%"
+                    "name": "%main.contributes.views.lcpr_bar.BricksExplorer.name%",
+                    "when": "leetcodeUltra.signedIn"
                 }
             ],
             "lcpr_workbench_panel": [
@@ -512,34 +564,24 @@
             ],
             "view/title": [
                 {
-                    "command": "lcpr.toggleLeetCodeCn",
-                    "when": "view == QuestionExplorer",
+                    "command": "lcpr.signout",
+                    "when": "view == QuestionExplorer && leetcodeUltra.signedIn",
                     "group": "navigation@0"
-                },
-                {
-                    "command": "lcpr.signin",
-                    "when": "view == QuestionExplorer",
-                    "group": "navigation@1"
                 },
                 {
                     "command": "lcpr.searchProblem",
                     "when": "view == QuestionExplorer",
-                    "group": "navigation@2"
-                },
-                {
-                    "command": "lcpr.refresh",
-                    "when": "view == QuestionExplorer",
-                    "group": "navigation@3"
+                    "group": "navigation@1"
                 },
                 {
                     "command": "lcpr.pickOne",
                     "when": "view == QuestionExplorer",
-                    "group": "navigation@4"
+                    "group": "navigation@2"
                 },
                 {
                     "command": "lcpr.autoCreateFileOptions",
                     "when": "view == QuestionExplorer",
-                    "group": "navigation@5"
+                    "group": "navigation@3"
                 },
                 {
                     "command": "lcpr.problems.sort",
@@ -555,6 +597,16 @@
                     "command": "lcpr.newBrickGroup",
                     "when": "view == BricksExplorer",
                     "group": "navigation@1"
+                },
+                {
+                    "command": "lcpr.studyPlan.refresh",
+                    "when": "view == LCPRStudyPlanView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "lcpr.studyPlan.pause",
+                    "when": "view == LCPRStudyPlanView",
+                    "group": "navigation@2"
                 }
             ],
             "view/item/context": [
@@ -585,12 +637,12 @@
                 },
                 {
                     "command": "lcpr.addFavorite",
-                    "when": "view == QuestionExplorer && viewItem =~ /leaf*/ && viewItem != leaf#10511#",
+                    "when": "view == QuestionExplorer && viewItem =~ /leaf#/ && viewItem =~ /fav-off$/",
                     "group": "inline"
                 },
                 {
                     "command": "lcpr.removeFavorite",
-                    "when": "view == QuestionExplorer && viewItem == leaf#10511#",
+                    "when": "view == QuestionExplorer && viewItem =~ /leaf#/ && viewItem =~ /fav-on$/",
                     "group": "inline"
                 },
                 {
@@ -619,13 +671,23 @@
                     "group": "leetcode@5"
                 },
                 {
+                    "command": "lcpr.addFavorite",
+                    "when": "view == BricksExplorer && viewItem =~ /leaf#/ && viewItem =~ /fav-off$/",
+                    "group": "inline"
+                },
+                {
+                    "command": "lcpr.removeFavorite",
+                    "when": "view == BricksExplorer && viewItem =~ /leaf#/ && viewItem =~ /fav-on$/",
+                    "group": "inline"
+                },
+                {
                     "command": "lcpr.removeBricksHave",
                     "when": "view == BricksExplorer && viewItem == cc#20100#",
                     "group": "leetcode@5"
                 },
                 {
                     "command": "lcpr.removeQidFromGroup",
-                    "when": "view == BricksExplorer && viewItem == leaf#20401#",
+                    "when": "view == BricksExplorer && viewItem =~ /leaf#20401#/",
                     "group": "leetcode@5"
                 },
                 {
@@ -640,7 +702,7 @@
                 },
                 {
                     "command": "lcpr.removeBricksNeedReviewDayNode",
-                    "when": "view == BricksExplorer && viewItem == leaf#20111#",
+                    "when": "view == BricksExplorer && viewItem =~ /leaf#20111#/",
                     "group": "leetcode@1"
                 }
             ],
@@ -914,7 +976,7 @@
                     },
                     "leetcode-problem-rating.useVscodeNode": {
                         "type": "boolean",
-                        "default": false,
+                        "default": true,
                         "scope": "machine",
                         "description": "%main.contributes.configuration.properties.leetcode-problem-rating.useVscodeNode.description%"
                     },
@@ -1563,7 +1625,10 @@
         "test:debug-api": "npm run compile && node scripts/debug-api-smoke-runner.js",
         "diagram:author": "node scripts/diagram-author.js",
         "diagram:validate": "npm run compile && node scripts/diagram-validate.js",
-        "diagram:render-fixtures": "npm run compile && node scripts/diagram-render-fixtures.js"
+        "diagram:render-fixtures": "npm run compile && node scripts/diagram-render-fixtures.js",
+        "test:study-plan:core": "npm run compile && node test/study-plan-core-test.js",
+        "test:study-plan:extension": "npm run compile && node scripts/study-plan-extension-test-runner.js",
+        "test:study-plan": "npm run test:study-plan:core && npm run test:study-plan:extension"
     },
     "devDependencies": {
         "@types/fs-extra": "^9.0.11",
@@ -1584,6 +1649,7 @@
         "cheerio": "1.0.0-rc.12",
         "fetch-h2": "^3.0.2",
         "fs-extra": "^10.0.0",
+        "fsrs.js": "1.2.2",
         "he": "1.2.0",
         "highlight.js": "^10.7.2",
         "lodash": "^4.17.21",

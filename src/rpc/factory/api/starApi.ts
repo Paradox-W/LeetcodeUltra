@@ -41,12 +41,21 @@ class StarApi extends ApiBase {
     sessionUtils.argv = argv;
     // translation doesn't affect question lookup
     chainMgr.getChainHead().getProblem(argv.keyword, true, function (e, problem) {
-      if (e) return reply.info(e);
+      if (e) return reply.info(JSON.stringify({ code: -1, msg: e.msg || e }));
 
       chainMgr.getChainHead().starProblem(problem, !argv.delete, function (e, flag) {
-        if (e) return reply.info(e);
+        if (e) return reply.info(JSON.stringify({ code: -2, msg: e.msg || e }));
         chainMgr.getChainHead().updateProblem(problem, { starred: flag });
-        reply.info(`[${problem.fid}] ${problem.name} ${flag ? "icon.like" : "icon.unlike"}`);
+        reply.info(
+          JSON.stringify({
+            code: 100,
+            fid: problem.fid,
+            qid: problem.id,
+            name: problem.name,
+            starred: flag,
+            icon: flag ? "icon.like" : "icon.unlike",
+          })
+        );
       });
     });
   }

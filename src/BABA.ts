@@ -126,6 +126,7 @@ export enum BabaStr {
   BABACMD_LoginOut = "BABACMD_LoginOut",
   BABACMD_deleteAllCache = "BABACMD_deleteAllCache",
   QuestionData_submitNewAccept = "QuestionData_submitNewAccept",
+  StudyPlan_update = "StudyPlan_update",
   RankScoreDataProxy = "RankScoreDataProxy",
   RankScoreDataMediator = "RankScoreDataMediator",
   BricksData_submitAndAccepted = "BricksData_submitAndAccepted",

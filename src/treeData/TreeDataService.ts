@@ -35,6 +35,19 @@ class TreeDataService {
     constructor() {
         this.onDidChangeTreeDataEvent = new vscode.EventEmitter();
         this.previewLoadSeq = 0;
+        this.rootOrderStorageKey = "leetcodeUltra.questionExplorer.rootOrder";
+        this.rootNodeTypes = new Set([
+            TreeNodeModel_1.TreeNodeType.Tree_day,
+            TreeNodeModel_1.TreeNodeType.Tree_All,
+            TreeNodeModel_1.TreeNodeType.Tree_difficulty,
+            TreeNodeModel_1.TreeNodeType.Tree_tag,
+            TreeNodeModel_1.TreeNodeType.Tree_favorite,
+            TreeNodeModel_1.TreeNodeType.Tree_choice,
+            TreeNodeModel_1.TreeNodeType.Tree_score,
+            TreeNodeModel_1.TreeNodeType.Tree_contest,
+            TreeNodeModel_1.TreeNodeType.Tree_search,
+            TreeNodeModel_1.TreeNodeType.Tree_carl,
+        ]);
         // tslint:disable-next-line:member-ordering
         this.onDidChangeTreeData = this.onDidChangeTreeDataEvent.event;
     }
@@ -46,6 +59,70 @@ class TreeDataService {
     }
     fire() {
         this.onDidChangeTreeDataEvent.fire(null);
+    }
+    canReorderRootNode(node) {
+        return !!node && this.rootNodeTypes.has(node.nodeType);
+    }
+    getRootNodeIdentity(node) {
+        return `${node.nodeType}|${node.id}|${node.input || ""}`;
+    }
+    getSavedRootOrder() {
+        var _a;
+        return (((_a = this.context) === null || _a === void 0 ? void 0 : _a.workspaceState.get(this.rootOrderStorageKey)) || []);
+    }
+    saveRootOrder(order) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            if (!((_a = this.context) === null || _a === void 0 ? void 0 : _a.workspaceState)) {
+                return;
+            }
+            yield this.context.workspaceState.update(this.rootOrderStorageKey, order);
+        });
+    }
+    applySavedRootOrder(nodes) {
+        const savedOrder = this.getSavedRootOrder();
+        if (!savedOrder.length) {
+            return nodes;
+        }
+        const savedIndex = new Map();
+        savedOrder.forEach((key, index) => savedIndex.set(key, index));
+        return nodes
+            .map((node, index) => ({ node, index, key: this.getRootNodeIdentity(node) }))
+            .sort((a, b) => {
+            const aSaved = savedIndex.has(a.key) ? savedIndex.get(a.key) : Number.MAX_SAFE_INTEGER;
+            const bSaved = savedIndex.has(b.key) ? savedIndex.get(b.key) : Number.MAX_SAFE_INTEGER;
+            if (aSaved !== bSaved) {
+                return aSaved - bSaved;
+            }
+            if (a.node.rootNodeSortId !== b.node.rootNodeSortId) {
+                return a.node.rootNodeSortId - b.node.rootNodeSortId;
+            }
+            return a.index - b.index;
+        })
+            .map((entry) => entry.node);
+    }
+    reorderRootNodes(sourceKeys, targetNode) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!sourceKeys.length) {
+                return;
+            }
+            if (targetNode && !this.canReorderRootNode(targetNode)) {
+                return;
+            }
+            const currentOrder = this.applySavedRootOrder(TreeViewController_1.treeViewController.getRootNodes())
+                .filter((node) => this.canReorderRootNode(node))
+                .map((node) => this.getRootNodeIdentity(node));
+            const moveKeys = [...new Set(sourceKeys)].filter((key) => currentOrder.includes(key));
+            if (!moveKeys.length) {
+                return;
+            }
+            const remaining = currentOrder.filter((key) => !moveKeys.includes(key));
+            const targetKey = targetNode ? this.getRootNodeIdentity(targetNode) : undefined;
+            const insertIndex = targetKey ? remaining.indexOf(targetKey) : remaining.length;
+            remaining.splice(insertIndex >= 0 ? insertIndex : remaining.length, 0, ...moveKeys);
+            yield this.saveRootOrder(remaining);
+            this.fire();
+        });
     }
     refresh() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -73,6 +150,7 @@ class TreeDataService {
             label: element.isProblem
                 ? this.getProblemLabel(element)
                 : element.name,
+            description: element.isProblem && element.isFavorite ? "♥" : undefined,
             tooltip: element.isProblem ? this.getProblemTooltip(element) : this.getSubCategoryTooltip(element),
             collapsibleState: element.isProblem
                 ? vscode.TreeItemCollapsibleState.None
@@ -120,7 +198,7 @@ class TreeDataService {
         }
         if (!element) {
             // Root view
-            return TreeViewController_1.treeViewController.getRootNodes();
+            return this.applySavedRootOrder(TreeViewController_1.treeViewController.getRootNodes());
         }
         else {
             if (element.nodeType == TreeNodeModel_1.TreeNodeType.Tree_day) {
@@ -319,99 +397,25 @@ class TreeDataService {
         });
     }
     signIn() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const picks = [];
-            let qpOpiton = {
-                title: "正在登录leetcode.com",
-                matchOnDescription: false,
-                matchOnDetail: false,
-                placeHolder: "请选择登录方式 正在登录leetcode.com",
-            };
-            picks.push({
-                label: "Browser Authorization",
-                detail: "在浏览器中完成授权登录，完成后自动返回 VS Code",
-                description: "[Recommended]",
-                value: "BrowserAuth",
-            });
-            if ((0, ConfigUtils_1.getLeetCodeEndpoint)() == ConstDefind_1.Endpoint.LeetCodeCN) {
-                picks.push({
-                    label: "LeetCode Account",
-                    detail: "只能登录leetcode.cn",
-                    value: "LeetCode",
-                }, {
-                    label: "LeetCode Cookie",
-                    detail: "Use LeetCode cookie copied from browser to login",
-                    value: "Cookie",
-                });
-                qpOpiton.title = "正在登录中文版leetcode.cn";
-                qpOpiton.placeHolder = "请选择登录方式 正在登录中文版leetcode.cn";
-            }
-            if ((0, ConfigUtils_1.getLeetCodeEndpoint)() == ConstDefind_1.Endpoint.LeetCode) {
-                picks.push({
-                    label: "LeetCode Cookie",
-                    detail: "Use LeetCode cookie copied from browser to login",
-                    value: "Cookie",
-                });
-                picks.push({
-                    label: "LeetCode chrome copy curl(bash) ",
-                    detail: "使用chrome复制最后一个graphql网络请求为curl请求,去掉复制内容中的换行符",
-                    value: "curltype",
-                });
-            }
-            picks.push({
-                label: "Third-Party: GitHub",
-                detail: "Use GitHub account to login",
-                value: "GitHub",
-            }, {
-                label: "Third-Party: LinkedIn",
-                detail: "Use LinkedIn account to login",
-                value: "LinkedIn",
-            });
-            const choice = yield vscode.window.showQuickPick(picks, qpOpiton);
-            if (!choice) {
-                return;
-            }
-            let loginMethod = choice.value;
-            if (loginMethod === "BrowserAuth") {
-                try {
-                    yield browserLoginService.signIn();
-                    yield vscode.window.showInformationMessage("已打开浏览器，请在网页中完成 LeetCode 授权登录。");
-                }
-                catch (error) {
-                    yield (0, OutputUtils_1.ShowMessage)("打开浏览器登录失败. 请看看控制台输出信息", ConstDefind_1.OutPutType.error);
-                }
-                return;
-            }
-            const isByCookie = loginMethod === "Cookie";
-            const inMessage = isByCookie ? " 通过cookie登录" : "登录";
-            try {
-                const userName = yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy)
-                    .get_instance()
-                    .trySignIn(loginMethod);
-                if (userName) {
-                    BABA_1.BABA.sendNotification(BABA_1.BabaStr.USER_LOGIN_SUC, { userName: userName });
-                    yield (0, OutputUtils_1.ShowMessage)(`${inMessage} 成功`, ConstDefind_1.OutPutType.info);
-                }
-            }
-            catch (error) {
-                (0, OutputUtils_1.ShowMessage)(`${inMessage}失败. 请看看控制台输出信息`, ConstDefind_1.OutPutType.error);
-            }
-        });
+        return browserLoginService.showLoginPage();
     }
     // 登出
     /**
      * It signs out the user
      */
-    signOut() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance().signOut();
-                yield (0, OutputUtils_1.ShowMessage)("成功登出", ConstDefind_1.OutPutType.info);
-                BABA_1.BABA.sendNotification(BABA_1.BabaStr.USER_LOGIN_OUT, {});
-            }
-            catch (error) {
-                // ShowMessage(`Failed to signOut. Please open the output channel for details`, OutPutType.error);
-            }
+  signOut() {
+    return __awaiter(this, void 0, void 0, function* () {
+      try {
+        const child = BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance();
+        yield child.signOut();
+        yield (0, OutputUtils_1.ShowMessage)("成功登出", ConstDefind_1.OutPutType.info);
+        BABA_1.BABA.sendNotification(BABA_1.BabaStr.USER_LOGIN_OUT, {});
+        BABA_1.BABA.sendNotification(BABA_1.BabaStr.BABACMD_refresh);
+        BABA_1.BABA.sendNotification(BABA_1.BabaStr.BricksData_refresh);
+      }
+      catch (error) {
+        // ShowMessage(`Failed to signOut. Please open the output channel for details`, OutPutType.error);
+      }
         });
     }
     // 删除所有缓存
@@ -486,6 +490,8 @@ class TreeDataMediator extends BABA_1.BABAMediator {
             BABA_1.BabaStr.StartReadData,
             BABA_1.BabaStr.BABACMD_Login,
             BABA_1.BabaStr.BABACMD_LoginOut,
+            BABA_1.BabaStr.USER_LOGIN_SUC,
+            BABA_1.BabaStr.USER_LOGIN_OUT,
             BABA_1.BabaStr.BABACMD_deleteAllCache,
             BABA_1.BabaStr.QuestionData_submitNewAccept,
             BABA_1.BabaStr.InitWorkspaceFolder,
@@ -581,10 +587,16 @@ class TreeDataMediator extends BABA_1.BABAMediator {
                     treeDataService.fire();
                     break;
                 case BABA_1.BabaStr.BABACMD_Login:
-                    treeDataService.signIn();
+                    yield treeDataService.signIn();
                     break;
                 case BABA_1.BabaStr.BABACMD_LoginOut:
-                    treeDataService.signOut();
+                    yield treeDataService.signOut();
+                    break;
+                case BABA_1.BabaStr.USER_LOGIN_SUC:
+                    yield browserLoginService.setSignedIn(true);
+                    break;
+                case BABA_1.BabaStr.USER_LOGIN_OUT:
+                    yield browserLoginService.setSignedIn(false);
                     break;
                 case BABA_1.BabaStr.BABACMD_deleteAllCache:
                     treeDataService.deleteAllCache();

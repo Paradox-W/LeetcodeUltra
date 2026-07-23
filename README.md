@@ -1,6 +1,6 @@
-# LeetCodeUltra-v1.0.0-develop-beta
+# LeetCodeUltra-v1.1.0-develop-beta
 
-LeetCodeUltra-v1.0.0-develop-beta 是一个面向高频刷题、复盘和本地调试重新设计的 VS Code LeetCode 助手。
+LeetCodeUltra-v1.1.0-develop-beta 是一个面向高频刷题、复盘和本地调试重新设计的 VS Code LeetCode 助手。
 
 它不是只把题目拉到编辑器里，而是把题目阅读、测试用例、运行结果、提交记录、性能分布、备注和 C++ 调试整理成一条连续的工作流。你可以在 VS Code 里打开题目、编辑代码、管理用例、查看提交历史、复盘错误版本，并在需要时启动本地调试。
 
@@ -106,6 +106,16 @@ LeetcodeUltra 保留并增强了原项目的题单能力，适合按难度、标
 - 支持搬砖 / 重复练习数据，刷过的题可以按间隔再练。
 - 支持本地 remark 备注。
 
+### 8. 16 周科学学习计划
+
+左侧“科学学习计划”以数组、链表、树、回溯、动态规划、单调栈和图论的先修顺序组织 125 道核心题。计划默认每天 120 分钟、最多 3 个不同问题，周日不排新题；到期复习、重题日和积压会自动调整当天题量。
+
+- 只有 LeetCode 服务器返回的提交 AC 才能完成完整编码任务。
+- 每次复习都要确认题型、不变量、复杂度和易错边界，再按“忘记 / 困难 / 顺利 / 迁移”评分。
+- 使用固定版本 `fsrs.js@1.2.2` 计算复习间隔，目标保持率 0.90，最长间隔 365 天。
+- 查看完整题解后不能评为“迁移”；一次 AC 不会直接标记为掌握。
+- 完整复习会在扩展全局存储中创建空白草稿，不覆盖原解答。
+
 ## 推荐工作流
 
 1. 在左侧题单中选择题目。
@@ -117,7 +127,7 @@ LeetcodeUltra 保留并增强了原项目的题单能力，适合按难度、标
 
 ## 与原始插件的关系
 
-LeetCodeUltra-v1.0.0-develop-beta 是基于 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 的派生增强版本，并使用独立扩展身份发布。
+LeetCodeUltra-v1.1.0-develop-beta 是基于 [ccagml/leetcode-extension](https://github.com/ccagml/leetcode-extension) 的派生增强版本，并使用独立扩展身份发布。
 
 本项目当前整体以 `GPL-3.0-only` 分发；同时保留上游 `ccagml/leetcode-extension` 的 MIT 归属说明，以及仓库内第三方组件各自的许可证与声明。在此基础上，LeetcodeUltra 对 UI、控制台、提交记录、性能展示、右侧助手和 C++ 调试体验做了较大幅度的产品化改造。
 
@@ -154,10 +164,11 @@ LeetcodeUltra 会在刷题工作区保存本地数据：
   bricks.json
   group.json
   remark/
+  study-plan.json
   submission-notes/
 ```
 
-这些数据用于重复练习、题目分组、备注和提交记录备注。
+这些数据用于重复练习、题目分组、科学学习计划、备注和提交记录备注。没有打开工作区时，学习计划会回退到扩展全局存储。
 
 ## 更新日志
 

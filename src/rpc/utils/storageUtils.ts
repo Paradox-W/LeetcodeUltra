@@ -484,6 +484,38 @@ class StorageUtils {
       .filter((testCase) => String(testCase || "").trim().length > 0);
   }
 
+  public formatStoredCaseLabel(testCase, index) {
+    if (testCase && typeof testCase === "object" && testCase.label !== undefined) {
+      const label = String(testCase.label || "").trim();
+      if (label) {
+        return label;
+      }
+    }
+    return `用例 ${index + 1}`;
+  }
+
+  public normalizeCaseEntries(cases) {
+    return (cases || [])
+      .map((testCase, index) => {
+        const value = this.deleteWriteCaseHeadENDn(this.formatStoredCase(testCase));
+        if (String(value || "").trim().length <= 0) {
+          return undefined;
+        }
+        const entry: any = {
+          label: this.formatStoredCaseLabel(testCase, index),
+          value,
+        };
+        if (testCase && typeof testCase === "object" && testCase.isDefault === true) {
+          entry.isDefault = true;
+        }
+        if (testCase && typeof testCase === "object" && testCase.isPinned === true) {
+          entry.isPinned = true;
+        }
+        return entry;
+      })
+      .filter((testCase) => !!testCase);
+  }
+
   public testCaseFile(filename, problemId, preferredRoot?) {
     const safeId = this.safeProblemId(problemId);
     if (preferredRoot) {
@@ -515,8 +547,40 @@ class StorageUtils {
     }
   }
 
+  public readProblemCaseEntries(filename, problemId) {
+    const caseFile = this.testCaseFile(filename, problemId);
+    if (!this.exist(caseFile)) {
+      return [];
+    }
+    try {
+      const data = JSON.parse(this.getData(caseFile));
+      return this.normalizeCaseEntries(Array.isArray(data) ? data : data.cases);
+    } catch (_) {
+      return [];
+    }
+  }
+
   public writeProblemCases(filename, problemId, cases, preferredRoot?) {
     const normalized = this.normalizeCaseList(cases);
+    const caseFile = this.testCaseFile(filename, problemId, preferredRoot);
+    this.mkdir(path.dirname(caseFile));
+    this.write(
+      caseFile,
+      JSON.stringify(
+        {
+          problemId,
+          updatedAt: new Date().toISOString(),
+          cases: normalized,
+        },
+        null,
+        2
+      )
+    );
+    return normalized;
+  }
+
+  public writeProblemCaseEntries(filename, problemId, cases, preferredRoot?) {
+    const normalized = this.normalizeCaseEntries(cases);
     const caseFile = this.testCaseFile(filename, problemId, preferredRoot);
     this.mkdir(path.dirname(caseFile));
     this.write(

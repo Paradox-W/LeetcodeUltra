@@ -533,14 +533,25 @@ class TreeViewController {
      * It adds a node to the user's favorites
      * @param {TreeNodeModel} node - TreeNodeModel
      */
+    applyFavoriteOptimistic(node, isFavorite) {
+        var _a, _b;
+        (_a = node === null || node === void 0 ? void 0 : node.get_data()) === null || _a === void 0 ? void 0 : _a.isFavorite = isFavorite;
+        const cachedNode = BABA_1.BABA.getProxy(BABA_1.BabaStr.QuestionDataProxy).getNodeByQid(node.qid);
+        if (cachedNode && cachedNode !== node) {
+            (_b = cachedNode.get_data()) === null || _b === void 0 ? void 0 : _b.isFavorite = isFavorite;
+        }
+        BABA_1.BABA.sendNotification(BABA_1.BabaStr.TreeData_rebuildTreeData);
+    }
     addFavorite(node) {
         return __awaiter(this, void 0, void 0, function* () {
+            this.applyFavoriteOptimistic(node, true);
             try {
                 yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance().toggleFavorite(node, true);
                 BABA_1.BABA.sendNotification(BABA_1.BabaStr.TreeData_favoriteChange);
             }
             catch (error) {
-                yield (0, OutputUtils_1.ShowMessage)("添加喜欢题目失败. 请查看控制台信息~", ConstDefind_1.OutPutType.error);
+                this.applyFavoriteOptimistic(node, false);
+                yield (0, OutputUtils_1.ShowMessage)("添加收藏失败，已恢复本地状态。请查看控制台信息~", ConstDefind_1.OutPutType.error);
             }
         });
     }
@@ -550,12 +561,14 @@ class TreeViewController {
      */
     removeFavorite(node) {
         return __awaiter(this, void 0, void 0, function* () {
+            this.applyFavoriteOptimistic(node, false);
             try {
                 yield BABA_1.BABA.getProxy(BABA_1.BabaStr.ChildCallProxy).get_instance().toggleFavorite(node, false);
                 BABA_1.BABA.sendNotification(BABA_1.BabaStr.TreeData_favoriteChange);
             }
             catch (error) {
-                yield (0, OutputUtils_1.ShowMessage)("移除喜欢题目失败. 请查看控制台信息~", ConstDefind_1.OutPutType.error);
+                this.applyFavoriteOptimistic(node, true);
+                yield (0, OutputUtils_1.ShowMessage)("取消收藏失败，已恢复本地状态。请查看控制台信息~", ConstDefind_1.OutPutType.error);
             }
         });
     }

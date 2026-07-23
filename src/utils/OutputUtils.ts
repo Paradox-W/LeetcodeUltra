@@ -10,7 +10,7 @@
 import * as vscode from "vscode";
 import { BABA, BabaStr } from "../BABA";
 import { DialogOptions, OutPutType } from "../model/ConstDefind";
-import { getLeetCodeEndpoint, getVsCodeConfig } from "./ConfigUtils";
+import { getVsCodeConfig } from "./ConfigUtils";
 
 export async function openUrl(url: string): Promise<void> {
   vscode.commands.executeCommand("vscode.open", vscode.Uri.parse(url));
@@ -28,31 +28,7 @@ export async function promptHintMessage(
 }
 
 export async function promptForSignIn(): Promise<void> {
-  const choice = await vscode.window.showQuickPick(
-    [
-      { label: "登录 LeetCode", value: DialogOptions.yes },
-      { label: "暂不登录", value: DialogOptions.no },
-      { label: "注册账号", value: DialogOptions.singUp },
-    ],
-    {
-      placeHolder: "请先登录 LeetCode",
-      ignoreFocusOut: true,
-    }
-  );
-  switch (choice?.value) {
-    case DialogOptions.yes:
-      await vscode.commands.executeCommand("lcpr.signin");
-      break;
-    case DialogOptions.singUp:
-      if (getLeetCodeEndpoint()) {
-        openUrl("https://leetcode.cn");
-      } else {
-        openUrl("https://leetcode.com");
-      }
-      break;
-    default:
-      break;
-  }
+  await vscode.commands.executeCommand("lcpr.signin");
 }
 
 export async function ShowMessage(message: string, type: OutPutType): Promise<void> {

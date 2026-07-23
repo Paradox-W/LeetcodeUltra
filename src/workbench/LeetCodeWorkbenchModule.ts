@@ -1,6 +1,8 @@
 // @ts-nocheck
 import * as vscode from "vscode";
 import * as ConfigUtils_1 from "../utils/ConfigUtils";
+import { UserStatus } from "../model/ConstDefind";
+import { BABAMediator } from "../BABA";
 import * as problemUtils_1 from "../utils/problemUtils";
 import * as storageUtils_1 from "../rpc/utils/storageUtils";
 class LeetCodeWorkbenchProvider {
@@ -35,6 +37,7 @@ class LeetCodeWorkbenchProvider {
     const isTransientEditorMiss = !!(options.preserveCurrentOnTransientMiss && !editor && !nextState.isLeetCodeFile && this.currentState && this.currentState.isLeetCodeFile);
     this.currentState = isTransientEditorMiss
       ? Object.assign({}, this.currentState, {
+        isLoggedIn: nextState.isLoggedIn,
         result: this.currentResult,
         activity: this.currentActivity,
         aiDebugEnabled: this.aiDebugEnabled,
@@ -104,6 +107,10 @@ class LeetCodeWorkbenchProvider {
     }
   }
   async refreshOfficialCases() {
+    if (!this.isLoggedIn()) {
+      this.setPanelMessage("请先登录 LeetCode 后再操作。");
+      return;
+    }
     const editor = this.getActiveEditor();
     if (!editor || !this.isLeetCodeDocument(editor.document)) {
       this.setPanelMessage("请先打开一个力扣题目文件。");
@@ -138,7 +145,7 @@ class LeetCodeWorkbenchProvider {
           seen.add(key);
           return true;
         })
-        .map((value, index) => ({ label: `用例 ${index + 1}`, value }));
+        .map((value, index) => ({ label: this.defaultCaseLabel(index), value, isDefault: true }));
       if (!officialCases.length) {
         this.setPanelMessage("题目描述中没有找到官方测试用例。");
         return;
@@ -156,6 +163,13 @@ class LeetCodeWorkbenchProvider {
       return testCase.map((item) => this.normalizeCaseText(item)).join("\n");
     }
     return this.normalizeCaseText(testCase || "");
+  }
+  defaultCaseLabel(index) {
+    return `用例 ${index + 1}`;
+  }
+  normalizeCaseLabel(label, index) {
+    const text = String(label || "").trim();
+    return text || this.defaultCaseLabel(index);
   }
   normalizeCaseText(value) {
     return String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\\n/g, "\n");
@@ -248,11 +262,21 @@ class LeetCodeWorkbenchProvider {
     const baseName = String(fileName || "").split(/[\\/]/).pop() || "当前题目";
     return baseName.replace(/\.[^.]+$/, "").replace(/^(\d+)-/, "$1. ").replace(/-/g, " ");
   }
+  isLoggedIn() {
+    try {
+      return this.baba.getProxy(this.babaStr.StatusBarProxy).getStatus() === UserStatus.SignedIn;
+    }
+    catch (_) {
+      return false;
+    }
+  }
   readState(preferredEditor) {
     const editor = this.getActiveEditor(preferredEditor);
+    const isLoggedIn = this.isLoggedIn();
     if (!editor || !this.isLeetCodeDocument(editor.document)) {
       return {
         isLeetCodeFile: false,
+        isLoggedIn,
         fileName: "未打开力扣题目",
         problemTitle: "未打开力扣题目",
         cases: [],
@@ -267,6 +291,7 @@ class LeetCodeWorkbenchProvider {
     const cases = this.readCases(editor, text);
     return {
       isLeetCodeFile: true,
+      isLoggedIn,
       fileName,
       problemTitle: this.getProblemTitle(text, editor.document.fileName),
       uri: editor.document.uri.toString(),
@@ -282,19 +307,35 @@ class LeetCodeWorkbenchProvider {
     if (!meta || !meta.id) {
       return this.parseCases(text);
     }
-    const storedCases = storageUtils_1.storageUtils.readProblemCases(editor.document.fileName, meta.id);
+    const storedCases = storageUtils_1.storageUtils.readProblemCaseEntries(editor.document.fileName, meta.id);
     if (storedCases.length > 0) {
       if (text.indexOf("@lcpr case=start") >= 0) {
         this.removeCaseBlocks(editor);
       }
-      return storedCases.map((value, index) => ({ id: `stored-${index}`, label: `用例 ${index + 1}`, value }));
+      return storedCases.map((testCase, index) => ({
+        id: `stored-${index}`,
+        label: this.normalizeCaseLabel(testCase === null || testCase === void 0 ? void 0 : testCase.label, index),
+        value: this.normalizeCaseText((testCase === null || testCase === void 0 ? void 0 : testCase.value) || ""),
+        isDefault: (testCase === null || testCase === void 0 ? void 0 : testCase.isDefault) === true,
+        isPinned: (testCase === null || testCase === void 0 ? void 0 : testCase.isPinned) === true,
+      }));
     }
     const legacyCases = this.parseCases(text);
     if (legacyCases.length > 0) {
-      const values = legacyCases.map((testCase) => testCase.value);
-      storageUtils_1.storageUtils.writeProblemCases(editor.document.fileName, meta.id, values);
+      const values = legacyCases.map((testCase, index) => ({
+        label: this.normalizeCaseLabel(testCase === null || testCase === void 0 ? void 0 : testCase.label, index),
+        value: testCase.value,
+        isDefault: true,
+      }));
+      storageUtils_1.storageUtils.writeProblemCaseEntries(editor.document.fileName, meta.id, values);
       this.removeCaseBlocks(editor);
-      return values.map((value, index) => ({ id: `stored-${index}`, label: `用例 ${index + 1}`, value }));
+      return values.map((testCase, index) => ({
+        id: `stored-${index}`,
+        label: this.normalizeCaseLabel(testCase === null || testCase === void 0 ? void 0 : testCase.label, index),
+        value: this.normalizeCaseText((testCase === null || testCase === void 0 ? void 0 : testCase.value) || ""),
+        isDefault: (testCase === null || testCase === void 0 ? void 0 : testCase.isDefault) === true,
+        isPinned: false,
+      }));
     }
     return [];
   }
@@ -315,7 +356,7 @@ class LeetCodeWorkbenchProvider {
       if (caseStartLine >= 0 && line.indexOf("@lcpr case=end") >= 0) {
         cases.push({
           id: `${caseStartLine}-${i}`,
-          label: `用例 ${cases.length + 1}`,
+          label: this.defaultCaseLabel(cases.length),
           value: parts.join(""),
           startLine: caseStartLine + 1,
           endLine: i + 1,
@@ -381,7 +422,12 @@ class LeetCodeWorkbenchProvider {
         resolve(undefined);
         return;
       }
-      storageUtils_1.storageUtils.writeProblemCases(document.fileName, meta.id, cases.map((testCase) => this.normalizeCaseText((testCase === null || testCase === void 0 ? void 0 : testCase.value) || "")));
+      storageUtils_1.storageUtils.writeProblemCaseEntries(document.fileName, meta.id, cases.map((testCase, index) => ({
+        label: this.normalizeCaseLabel(testCase === null || testCase === void 0 ? void 0 : testCase.label, index),
+        value: this.normalizeCaseText((testCase === null || testCase === void 0 ? void 0 : testCase.value) || ""),
+        isDefault: (testCase === null || testCase === void 0 ? void 0 : testCase.isDefault) === true,
+        isPinned: (testCase === null || testCase === void 0 ? void 0 : testCase.isPinned) === true,
+      })));
       this.savingCases = true;
       this.removeCaseBlocks(editor).then(() => {
         this.savingCases = false;
@@ -403,7 +449,12 @@ class LeetCodeWorkbenchProvider {
     const enableAiDebug = Object.prototype.hasOwnProperty.call(options, "enableAiDebug")
       ? !!options.enableAiDebug
       : !!this.aiDebugEnabled;
-    if (!uri && ["submit", "test", "retest", "case", "allcase", "runCase", "debug"].indexOf(action) >= 0) {
+    const requiresLogin = ["submit", "test", "retest", "case", "allcase", "runCase", "debug"].indexOf(action) >= 0;
+    if (requiresLogin && !this.isLoggedIn()) {
+      this.setPanelMessage("请先登录 LeetCode 后再操作。");
+      return;
+    }
+    if (!uri && requiresLogin) {
       this.setPanelMessage("请先打开一个力扣题目文件。");
       return;
     }
@@ -615,6 +666,7 @@ class LeetCodeWorkbenchProvider {
       --lcpr-workbench-case-editor-border: color-mix(in srgb, var(--lcpr-workbench-soft-bg) 97%, var(--lcpr-workbench-fg) 3%);
       --lcpr-toolbar-disabled-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 92%, var(--lcpr-workbench-fg) 8%);
       --lcpr-toolbar-disabled-fg: color-mix(in srgb, var(--lcpr-workbench-fg) 42%, var(--lcpr-workbench-bg) 58%);
+      --lcpr-warning-text: var(--vscode-editorWarning-foreground, #7a5a00);
       --workspace-split: 66.7%;
       --workspace-default-snap-x: 66.7%;
       --workspace-golden-snap-x: 61.8%;
@@ -641,6 +693,7 @@ class LeetCodeWorkbenchProvider {
       --lcpr-workbench-case-editor-border: color-mix(in srgb, var(--lcpr-workbench-soft-bg) 94%, var(--lcpr-workbench-fg) 6%);
       --lcpr-toolbar-disabled-bg: color-mix(in srgb, var(--lcpr-workbench-bg) 82%, #ffffff 18%);
       --lcpr-toolbar-disabled-fg: color-mix(in srgb, var(--lcpr-workbench-fg) 44%, var(--lcpr-workbench-bg) 56%);
+      --lcpr-warning-text: var(--vscode-editorWarning-foreground, #e5c45a);
     }
     * { box-sizing: border-box; }
     body {
@@ -928,7 +981,7 @@ class LeetCodeWorkbenchProvider {
     }
     .tone-success { --tone: var(--lcpr-success-deep); }
     .tone-danger { --tone: var(--vscode-testing-iconFailed, #d1242f); }
-    .tone-warning { --tone: var(--vscode-testing-iconQueued, #bf8700); }
+    .tone-warning { --tone: var(--lcpr-warning-text); }
     .tone-running { --tone: var(--vscode-progressBar-background, #0e70c0); }
     .tone-neutral { --tone: var(--lcpr-workbench-muted); }
     .tone-success .result-dot,
@@ -1166,7 +1219,8 @@ class LeetCodeWorkbenchProvider {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .result-card-pin {
+    .result-card-pin,
+    .case-pin-toggle {
       display: inline-grid;
       place-items: center;
       width: 18px;
@@ -1178,15 +1232,18 @@ class LeetCodeWorkbenchProvider {
       background: transparent;
       cursor: pointer;
     }
-    .result-card-pin:hover {
+    .result-card-pin:hover,
+    .case-pin-toggle:hover {
       color: var(--lcpr-workbench-fg);
       background: var(--lcpr-workbench-hover);
     }
-    .result-card-pin:active {
+    .result-card-pin:active,
+    .case-pin-toggle:active {
       color: var(--lcpr-workbench-fg);
       background: var(--vscode-toolbar-activeBackground, var(--lcpr-workbench-hover));
     }
-    .result-card-pin svg {
+    .result-card-pin svg,
+    .case-pin-toggle svg {
       width: 16px;
       height: 16px;
       display: block;
@@ -1195,6 +1252,13 @@ class LeetCodeWorkbenchProvider {
       stroke-width: 1.85;
       stroke-linecap: round;
       stroke-linejoin: round;
+    }
+    .case-pin-toggle.is-pinned svg {
+      fill: currentColor;
+    }
+    .case-pin-toggle:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
     }
     .result-card-input,
     .result-card-comparison {
@@ -2568,10 +2632,13 @@ class LeetCodeWorkbenchProvider {
     }
     .list {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+      grid-template-columns: minmax(0, 1fr);
       align-items: start;
       gap: 8px;
       padding: 8px 10px 10px calc(10px - var(--workspace-divider-visual-offset));
+    }
+    .list.is-multicolumn {
+      grid-template-columns: repeat(var(--case-columns, 2), minmax(0, 1fr));
     }
     .case {
       position: relative;
@@ -2619,10 +2686,91 @@ class LeetCodeWorkbenchProvider {
       color: var(--lcpr-workbench-fg);
       font-weight: 700;
       font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
       line-height: 1.2;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .case-title-button,
+    .case-title-input {
+      width: 100%;
+      min-width: 0;
+      border-radius: 6px;
+      font: inherit;
+    }
+    .case-title-button {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 6px;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      cursor: text;
+    }
+    .case-title-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .case-title-display {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 5px;
+      width: 100%;
+      min-width: 0;
+    }
+    .case-title-display .case-title-button {
+      flex: 0 1 auto;
+      width: auto;
+    }
+    .case-title-edit {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+    .case-title-edit .case-title-input {
+      flex: 0 1 120px;
+      width: min(120px, 100%);
+    }
+    .case-default-badge {
+      flex: 0 0 auto;
+      padding: 0 4px;
+      border: 1px solid var(--lcpr-workbench-soft-border);
+      border-radius: 999px;
+      color: var(--lcpr-workbench-muted);
+      background: var(--lcpr-workbench-soft-bg);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 14px;
+    }
+    .case-title-button:hover {
+      background: var(--lcpr-workbench-hover);
+    }
+    .case-title-button:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
+    }
+    .case-title-input {
+      padding: 1px 6px;
+      border: 1px solid var(--vscode-focusBorder);
+      color: var(--lcpr-workbench-fg);
+      background: var(--lcpr-workbench-bg);
+    }
+    .case-title-input:focus {
+      outline: none;
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder) 55%, transparent);
+    }
+    .case-title-input.is-invalid,
+    .case-title-input[aria-invalid="true"] {
+      border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-testing-iconFailed, #d1242f));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-inputValidation-errorBorder, #d1242f) 55%, transparent);
     }
     .case-actions {
       display: flex;
@@ -2645,6 +2793,18 @@ class LeetCodeWorkbenchProvider {
     .case-actions button:hover {
       color: var(--lcpr-workbench-fg);
       background: var(--lcpr-workbench-hover);
+    }
+    .case-actions button:disabled,
+    .case-add-button:disabled {
+      color: var(--lcpr-toolbar-disabled-fg);
+      background: transparent;
+      cursor: default;
+      opacity: 0.55;
+    }
+    .case-actions button:disabled:hover,
+    .case-add-button:disabled:hover {
+      color: var(--lcpr-toolbar-disabled-fg);
+      background: transparent;
     }
     .case-actions button:active {
       color: var(--lcpr-workbench-fg);
@@ -2906,8 +3066,12 @@ class LeetCodeWorkbenchProvider {
         // Ignore webview storage failures.
       }
     }
-    let state = { isLeetCodeFile: false, cases: [], activityExpanded: false, activityRange: 7, debugVisualTheme: storedDebugVisualTheme(), workspaceSplitRatio: readWorkspaceSplit() };
+    let state = { isLeetCodeFile: false, isLoggedIn: false, cases: [], activityExpanded: false, activityRange: 7, debugVisualTheme: storedDebugVisualTheme(), workspaceSplitRatio: readWorkspaceSplit() };
+    let editingCaseIndex = -1;
+    let editingCaseOriginalLabel = '';
+    let editingCaseOriginalIsDefault = false;
     const content = document.getElementById('content');
+    const casePane = document.querySelector('.case-pane');
     const file = document.getElementById('file');
     const resultEl = document.getElementById('result');
     const workspace = document.getElementById('workspace');
@@ -2924,6 +3088,7 @@ class LeetCodeWorkbenchProvider {
 	    let activeResultCardScrollTimer = 0;
 	    let activeCaseScrollEditor;
 	    let activeCaseScrollTimer = 0;
+	    let caseListLayoutFrame = 0;
 	    const send = (message) => vscode.postMessage(message);
 	    function applyWorkspaceSplit(ratio, persist = false) {
 	      const split = clampWorkspaceSplit(ratio);
@@ -2941,6 +3106,7 @@ class LeetCodeWorkbenchProvider {
 	      }
 	      vscode.setState(state);
 	      requestAnimationFrame(syncResultInputOverflow);
+	      scheduleCaseListLayout();
 	      return split;
 	    }
     function snapWorkspaceSplit(ratio) {
@@ -2990,17 +3156,47 @@ class LeetCodeWorkbenchProvider {
     function isDebugPayload(payload) {
       return !!(payload && (payload.action === 'debug' || payload.runMode === 'debug'));
     }
+    function serverAccepted(payload) {
+      const data = getResultData(payload);
+      const sys = data.system_message || (payload && payload.submitEvent) || {};
+      return sys.accepted === true;
+    }
+    function serverCaseVerdict(payload, index) {
+      const data = getResultData(payload);
+      const sys = data.system_message || (payload && payload.submitEvent) || {};
+      if (serverAccepted(payload)) return 'Correct';
+      const compareResult = sys.compare_result;
+      if (compareResult === undefined || compareResult === null) return '';
+      const marker = compareResult[index];
+      if (marker === true || marker === 1 || marker === '1') return 'Correct';
+      if (marker === false || marker === 0 || marker === '0') return 'Wrong Answer';
+      return '';
+    }
+    function isPartialAllcaseResult(payload) {
+      if (getMode(payload) !== '全部用例') return false;
+      const data = getResultData(payload);
+      const sys = data.system_message || (payload && payload.submitEvent) || {};
+      const compareResult = sys.compare_result;
+      if (compareResult === undefined || compareResult === null) return false;
+      const markers = Array.isArray(compareResult) ? compareResult : String(compareResult).split('');
+      const hasCorrect = markers.some((marker) => marker === true || marker === 1 || marker === '1');
+      const hasWrong = markers.some((marker) => marker === false || marker === 0 || marker === '0');
+      return hasCorrect && hasWrong;
+    }
     function getStatus(payload) {
       if (!payload) return '';
       if (payload.phase === 'running') return '运行中';
-      const verdict = caseVerdict(payload);
-      if (verdict) return verdict;
       const data = getResultData(payload);
       const sys = data.system_message || payload.submitEvent || {};
       const statusCode = Number(data.statusCode || data.status_code || sys.statusCode || sys.status_code || 0);
       const msg = asLines(data.msg || data.message || data.error || data.messages).join(' ').toLowerCase();
       if (statusCode >= 400 || /http error|too many requests|rate limit|429/.test(msg)) return '请求失败';
-      return (data.messages && data.messages[0]) || sys.status || (sys.accepted ? 'Accepted' : '结果');
+      if (serverAccepted(payload)) return 'Accepted';
+      if (isPartialAllcaseResult(payload)) return '部分错误';
+      const serverStatus = asLines(data.messages)[0] || sys.status || '';
+      if (sys.accepted === false && /^(accepted|finished|correct)$/i.test(serverStatus)) return 'Wrong Answer';
+      if (!serverStatus || /^error$/i.test(serverStatus)) return '服务端错误';
+      return serverStatus;
     }
     function zhStatus(status) {
       const text = String(status || '');
@@ -3042,7 +3238,7 @@ class LeetCodeWorkbenchProvider {
       const sys = data.system_message || payload.submitEvent || {};
       const status = getStatus(payload).toLowerCase();
       if (sys.accepted || /^(accepted|finished|correct)$/.test(status)) return 'tone-success';
-      if (/time limit|memory limit|output limit|exceeded/.test(status)) return 'tone-warning';
+      if (status === '部分错误' || /time limit|memory limit|output limit|exceeded/.test(status)) return 'tone-warning';
       if (/wrong|runtime|compile|error|failed|exception/.test(status)) return 'tone-danger';
       return 'tone-neutral';
     }
@@ -3127,8 +3323,7 @@ class LeetCodeWorkbenchProvider {
 	          }
 	          const outputValue = resultIndex >= 0 ? outputRows[resultIndex] || '' : '';
 	          const expectedValue = resultIndex >= 0 ? expectedRows[resultIndex] || '' : '';
-	          const verdict = allcaseVerdictForCase(testCase, index, payload) ||
-	            ((outputValue || expectedValue) ? (compareValue(outputValue) === compareValue(expectedValue) ? 'Correct' : 'Wrong Answer') : '');
+	          const verdict = allcaseVerdictForCase(testCase, index, payload);
 	          return {
 	            label: testCase.label || ('用例 ' + (index + 1)),
 	            input: displayResultValue((testCase && testCase.value) || inputRows[resultIndex >= 0 ? resultIndex : index] || ''),
@@ -3149,6 +3344,7 @@ class LeetCodeWorkbenchProvider {
 	    function detailCardTone(card, payload) {
 	      if (card && card.verdict === 'Correct') return 'result-card-pass';
 	      if (card && card.verdict === 'Wrong Answer') return 'result-card-fail';
+	      if (getMode(payload) === '全部用例') return 'result-card-neutral';
 	      const tone = getTone(payload);
 	      if (tone === 'tone-success') return 'result-card-pass';
 	      if (tone === 'tone-danger') return 'result-card-fail';
@@ -3527,14 +3723,6 @@ class LeetCodeWorkbenchProvider {
       }
       return '';
     }
-    function compareValue(value) {
-      let text = String(value || '').trim();
-      if ((text.startsWith("'") && text.endsWith("'")) || (text.startsWith('"') && text.endsWith('"'))) {
-        text = text.slice(1, -1);
-      }
-      text = text.replace(/\\\\n/g, '\\n').replace(/\\r\\n/g, '\\n').trim();
-      return text.split('\\n').map((line) => line.trim()).join('\\n');
-    }
     function compactCaseValue(value) {
       return normalizeCaseValue(value).replace(/\\s+/g, '');
     }
@@ -3578,24 +3766,22 @@ class LeetCodeWorkbenchProvider {
     }
     function allcaseVerdictForCase(testCase, index, payload) {
       const data = getResultData(payload);
+      const sys = data.system_message || (payload && payload.submitEvent) || {};
       const inputRows = splitAllcaseRows(sectionValue(data, ['Your Input', 'Input', 'Testcase', 'Last Testcase']));
-      const outputRows = splitAllcaseRows(sectionValue(data, ['Answer', 'Output']));
-      const expectedRows = splitAllcaseRows(sectionValue(data, ['Expected Answer', 'Expected Output', 'Expected']));
-      if (!outputRows.length || !expectedRows.length) return '';
+      if (serverAccepted(payload)) return 'Correct';
       let resultIndex = allcaseIndexForCase(testCase, index, inputRows, state.cases);
-      if (resultIndex < 0 && outputRows.length === state.cases.length && expectedRows.length === state.cases.length) {
+      if (resultIndex < 0 && sys.compare_result && sys.compare_result.length === state.cases.length) {
         resultIndex = index;
       }
-      if (resultIndex < 0 || resultIndex >= outputRows.length || resultIndex >= expectedRows.length) return '';
-      return compareValue(outputRows[resultIndex]) === compareValue(expectedRows[resultIndex]) ? 'Correct' : 'Wrong Answer';
+      if (resultIndex < 0) return '';
+      return serverCaseVerdict(payload, resultIndex);
     }
     function caseVerdict(payload) {
       if (!payload || payload.phase === 'running' || !isCaseResult(payload)) return '';
-      const data = getResultData(payload);
-      const output = sectionValue(data, ['Answer', 'Output']);
-      const expected = sectionValue(data, ['Expected Answer', 'Expected Output', 'Expected']);
-      if (!output || !expected) return '';
-      return compareValue(output) === compareValue(expected) ? 'Correct' : 'Wrong Answer';
+      const serverVerdict = serverCaseVerdict(payload, 0);
+      if (serverVerdict) return serverVerdict;
+      if (getMode(payload) === '全部用例') return '';
+      return /^wrong answer$/i.test(getStatus(payload)) ? 'Wrong Answer' : '';
     }
     function failingCaseValue(payload) {
       const data = getResultData(payload);
@@ -3614,6 +3800,7 @@ class LeetCodeWorkbenchProvider {
       const mode = getMode(payload);
       const active = normalizeCaseValue(payload.activeTestCase);
       const current = normalizeCaseValue(testCase.value);
+      if (getStatus(payload) === '服务端错误') return '';
       const verdict = caseVerdict(payload);
       const accepted = verdict ? verdict === 'Correct' : (!!sys.accepted || /^(accepted|finished)$/i.test(getStatus(payload)));
       if (mode === '全部用例') {
@@ -4066,9 +4253,47 @@ class LeetCodeWorkbenchProvider {
 	      textarea.style.height = next + 'px';
 	      textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
 	      syncCaseScrollbar(textarea);
+	      scheduleCaseListLayout();
 	    }
     function autosizeAllTextareas() {
       document.querySelectorAll('textarea').forEach(autosizeTextarea);
+    }
+    function preferredCaseColumnCount(singleHeight, availableHeight, availableWidth, itemCount) {
+      const minColumnWidth = 220;
+      const gap = 8;
+      const height = Math.max(0, Number(singleHeight) || 0);
+      const viewportHeight = Math.max(0, Number(availableHeight) || 0);
+      const width = Math.max(0, Number(availableWidth) || 0);
+      const maxByItems = Math.min(3, Math.max(1, Number(itemCount) || 1));
+      if (!viewportHeight || height <= viewportHeight + gap || maxByItems < 2) return 1;
+      const maxByWidth = Math.max(1, Math.floor((width + gap) / (minColumnWidth + gap)));
+      if (maxByWidth < 2) return 1;
+      const neededByHeight = Math.max(2, Math.ceil(height / viewportHeight));
+      return Math.min(maxByItems, maxByWidth, neededByHeight);
+    }
+    function syncCaseListLayout() {
+      const list = content.querySelector('.list');
+      if (!list || !casePane) return;
+      list.classList.remove('is-multicolumn');
+      list.style.removeProperty('--case-columns');
+      list.removeAttribute('data-columns');
+      const computed = window.getComputedStyle(list);
+      const horizontalPadding = (parseFloat(computed.paddingLeft) || 0) + (parseFloat(computed.paddingRight) || 0);
+      const availableWidth = Math.max(0, list.clientWidth - horizontalPadding);
+      const columns = preferredCaseColumnCount(list.scrollHeight, casePane.clientHeight, availableWidth, state.cases.length);
+      if (columns < 2) return;
+      list.style.setProperty('--case-columns', String(columns));
+      list.setAttribute('data-columns', String(columns));
+      list.classList.add('is-multicolumn');
+    }
+    function scheduleCaseListLayout() {
+      if (caseListLayoutFrame) {
+        cancelAnimationFrame(caseListLayoutFrame);
+      }
+      caseListLayoutFrame = requestAnimationFrame(() => {
+        caseListLayoutFrame = 0;
+        syncCaseListLayout();
+      });
     }
 	    function equalizeResultBlocks() {
 	      const grid = document.querySelector('.result-diagnostics-grid.equalized');
@@ -4211,8 +4436,8 @@ class LeetCodeWorkbenchProvider {
 	      activeResultInputPopover = popover;
 	      activeResultInputTarget = target;
 	    }
-	    function syncToolbarState(hasLeetCodeFile) {
-	      const disabled = !hasLeetCodeFile;
+	    function syncToolbarState(hasLeetCodeFile, isLoggedIn) {
+	      const disabled = !hasLeetCodeFile || !isLoggedIn;
       if (lastVoidWorkbench !== disabled) {
         document.body.classList.toggle('void-workbench', disabled);
         lastVoidWorkbench = disabled;
@@ -4237,7 +4462,9 @@ class LeetCodeWorkbenchProvider {
 	      file.innerHTML = escapeHtml(state.problemTitle || state.fileName || '未打开力扣题目') + (state.dirty ? ' <span class="dirty">已修改</span>' : '');
 	      document.body.classList.toggle('show-ai-debug', !!state.aiDebugEnabled || isDebugPayload(state.result));
 	      const hasLeetCodeFile = !!state.isLeetCodeFile;
-	      syncToolbarState(hasLeetCodeFile);
+	      const canUseActions = hasLeetCodeFile && !!state.isLoggedIn;
+	      const disabledAttr = canUseActions ? '' : ' disabled aria-disabled="true"';
+	      syncToolbarState(hasLeetCodeFile, !!state.isLoggedIn);
 	      aiDebugToggle.checked = !!state.aiDebugEnabled;
 	      syncWorkspaceSplit();
 	      renderResultStable(false);
@@ -4246,17 +4473,17 @@ class LeetCodeWorkbenchProvider {
         return;
       }
       if (!state.cases.length) {
-        content.innerHTML = '<div class="empty">还没有 @lcpr 测试用例。</div><div class="case-add-row"><button class="case-add-button" data-add-case title="添加用例" aria-label="添加用例">' + icon('add') + '</button></div>';
+        content.innerHTML = '<div class="empty">还没有 @lcpr 测试用例。</div><div class="case-add-row"><button class="case-add-button" data-add-case title="添加用例" aria-label="添加用例"' + disabledAttr + '>' + icon('add') + '</button></div>';
         return;
       }
       content.innerHTML = '<div class="list">' + state.cases.map((testCase, index) => \`
         <div class="case\${caseClass(testCase, index)}" data-index="\${index}">
           <div class="case-header">
-            <div class="case-title">\${escapeHtml(testCase.label || ('用例 ' + (index + 1)))}</div>
+            <div class="case-title">\${renderCaseTitle(testCase, index)}</div>
             <div class="case-actions">
-              <button data-run="\${index}" title="运行" aria-label="运行">\${icon('run')}</button>
-              <button data-debug="\${index}" title="调试" aria-label="调试">\${icon('debug')}</button>
-              <button data-delete="\${index}" title="删除" aria-label="删除">\${icon('delete')}</button>
+              <button data-run="\${index}" title="运行" aria-label="运行"\${disabledAttr}>\${icon('run')}</button>
+              <button data-debug="\${index}" title="调试" aria-label="调试"\${disabledAttr}>\${icon('debug')}</button>
+              <button data-delete="\${index}" title="删除" aria-label="删除"\${disabledAttr}>\${icon('delete')}</button>
             </div>
 	          </div>
 	          <div class="case-editor">
@@ -4264,14 +4491,123 @@ class LeetCodeWorkbenchProvider {
 	            <span class="case-scrollbar" aria-hidden="true"><span class="case-scrollbar-thumb"></span></span>
 	          </div>
 	        </div>\`).join('') + '</div>';
-      content.querySelector('.list').insertAdjacentHTML('beforeend', '<div class="case-add-row"><button class="case-add-button" data-add-case title="添加用例" aria-label="添加用例">' + icon('add') + '</button></div>');
+      content.querySelector('.list').insertAdjacentHTML('beforeend', '<div class="case-add-row"><button class="case-add-button" data-add-case title="添加用例" aria-label="添加用例"' + disabledAttr + '>' + icon('add') + '</button></div>');
       autosizeAllTextareas();
+      scheduleCaseListLayout();
+      if (editingCaseIndex >= 0) {
+        const labelInput = content.querySelector('[data-edit-label="' + editingCaseIndex + '"]');
+        if (labelInput) {
+          requestAnimationFrame(() => {
+            labelInput.focus();
+            if (labelInput.select) {
+              labelInput.select();
+            }
+          });
+        } else {
+          editingCaseIndex = -1;
+        }
+      }
     }
     function currentCases() {
       return state.cases.map((testCase, index) => {
-        const textarea = document.querySelector('[data-edit="' + index + '"]');
-        return { ...testCase, value: textarea ? textarea.value : testCase.value };
+        const textarea = content.querySelector('[data-edit="' + index + '"]');
+        const labelInput = content.querySelector('[data-edit-label="' + index + '"]');
+        const nextLabel = labelInput && !isCaseRenameEmpty(labelInput.value) ? labelInput.value : testCase.label;
+        return { ...testCase, label: normalizeCaseLabel(nextLabel, index), value: textarea ? textarea.value : testCase.value };
       });
+    }
+    function eventElementTarget(event) {
+      const target = event && event.target;
+      if (!target) return undefined;
+      if (target.nodeType === 1) return target;
+      if (target.nodeType === 3) return target.parentElement || undefined;
+      return undefined;
+    }
+    function defaultCaseLabel(index) {
+      return '用例 ' + (index + 1);
+    }
+    function renderCaseTitle(testCase, index) {
+      const label = testCase && testCase.label ? testCase.label : defaultCaseLabel(index);
+      const defaultBadge = testCase && testCase.isDefault ? '<span class="case-default-badge" data-default-badge>默认</span>' : '';
+      const isPinned = !!(testCase && testCase.isPinned);
+      const pinLabel = isPinned ? '取消置顶' : '置顶用例';
+      const pinButton = '<button type="button" class="case-pin-toggle' + (isPinned ? ' is-pinned' : '') + '" data-toggle-pin="' + index + '" title="' + pinLabel + '" aria-label="' + pinLabel + '" aria-pressed="' + (isPinned ? 'true' : 'false') + '">' + icon('bookmark') + '</button>';
+      const badges = defaultBadge + pinButton;
+      if (editingCaseIndex === index) {
+        return '<div class="case-title-edit"><input class="case-title-input" data-edit-label="' + index + '" value="' + escapeHtml(label) + '" maxlength="6" spellcheck="false" aria-label="重命名用例" />' + badges + '</div>';
+      }
+      return '<div class="case-title-display"><button type="button" class="case-title-button" data-rename="' + index + '" title="重命名用例" aria-label="重命名用例"><span class="case-title-text">' + escapeHtml(label) + '</span></button>' + badges + '</div>';
+    }
+    function markCaseModified(index) {
+      if (!Number.isFinite(index) || !state.cases[index] || !state.cases[index].isDefault) return;
+      state.cases[index] = { ...state.cases[index], isDefault: false };
+      const caseElement = content.querySelector('.case[data-index="' + index + '"]');
+      const badge = caseElement && caseElement.querySelector('[data-default-badge]');
+      if (badge) badge.remove();
+    }
+    function updateCasePinButton(index, isPinned) {
+      const button = content.querySelector('[data-toggle-pin="' + index + '"]');
+      if (!button) return;
+      const label = isPinned ? '取消置顶' : '置顶用例';
+      button.classList.toggle('is-pinned', isPinned);
+      button.setAttribute('aria-pressed', isPinned ? 'true' : 'false');
+      button.setAttribute('aria-label', label);
+      button.setAttribute('title', label);
+    }
+    function toggleCasePin(index) {
+      const numericIndex = Number(index);
+      if (!Number.isFinite(numericIndex) || !state.cases[numericIndex]) return;
+      state.cases = currentCases();
+      if (state.cases[numericIndex].isPinned) {
+        state.cases[numericIndex] = { ...state.cases[numericIndex], isPinned: false };
+        updateCasePinButton(numericIndex, false);
+        scheduleCaseAutosave(true);
+        return;
+      }
+      const pinnedCase = { ...state.cases[numericIndex], isPinned: true };
+      const restCases = state.cases
+        .filter((_, caseIndex) => caseIndex !== numericIndex)
+        .map((testCase) => ({ ...testCase, isPinned: false }));
+      state.cases = [pinnedCase].concat(restCases);
+      editingCaseIndex = -1;
+      editingCaseOriginalLabel = '';
+      editingCaseOriginalIsDefault = false;
+      render();
+      scheduleCaseAutosave(true);
+    }
+    function caseLabelLength(label) {
+      return Array.from(String(label || '')).length;
+    }
+    function trimCaseLabel(label) {
+      return String(label || '').trim();
+    }
+    function normalizeCaseLabel(label, index) {
+      const text = trimCaseLabel(label);
+      return text || defaultCaseLabel(index);
+    }
+    function validateCaseRename(label) {
+      const text = trimCaseLabel(label);
+      if (!text) {
+        return '用例名称不能为空。';
+      }
+      if (caseLabelLength(text) > 6) {
+        return '用例名称最多 6 个字。';
+      }
+      return '';
+    }
+    function isCaseRenameEmpty(label) {
+      return !trimCaseLabel(label);
+    }
+    function updateCaseRenameValidity(input) {
+      if (!input) return false;
+      const invalid = isCaseRenameEmpty(input.value);
+      input.classList.toggle('is-invalid', invalid);
+      if (invalid) {
+        input.setAttribute('aria-invalid', 'true');
+      } else {
+        input.removeAttribute('aria-invalid');
+      }
+      return !invalid;
     }
     function trimCaseInput(value) {
       return String(value || '').trim().replace(/(?:\\\\n|\\r?\\n)+$/g, '');
@@ -4297,11 +4633,12 @@ class LeetCodeWorkbenchProvider {
 	      closeResultInputPopover();
 	      const cases = currentCases();
 	      const existingIndex = cases.findIndex((testCase) => normalizeCaseValue(testCase && testCase.value) === normalizedInput);
-	      const pinnedCase = existingIndex >= 0 ? cases[existingIndex] : { label: '用例 1', value: input };
-	      const restCases = existingIndex >= 0 ? cases.filter((_, i) => i !== existingIndex) : cases;
+	      const pinnedCase = { ...(existingIndex >= 0 ? cases[existingIndex] : { label: defaultCaseLabel(0), value: input }), isPinned: true };
+	      const restCases = (existingIndex >= 0 ? cases.filter((_, i) => i !== existingIndex) : cases)
+          .map((testCase) => ({ ...testCase, isPinned: false }));
 	      state.cases = [pinnedCase].concat(restCases).map((testCase, i) => ({
 	        ...testCase,
-	        label: '用例 ' + (i + 1),
+	        label: normalizeCaseLabel(testCase && testCase.label, i),
 	      }));
 	      render();
 	      scheduleCaseAutosave(true);
@@ -4310,6 +4647,63 @@ class LeetCodeWorkbenchProvider {
 	    let caseInputComposing = false;
     function updateCaseStateFromInputs() {
       state.cases = currentCases();
+    }
+    function startCaseRename(index) {
+      updateCaseStateFromInputs();
+      editingCaseIndex = Number(index);
+      editingCaseOriginalLabel = state.cases[editingCaseIndex] ? String(state.cases[editingCaseIndex].label || '') : '';
+      editingCaseOriginalIsDefault = !!(state.cases[editingCaseIndex] && state.cases[editingCaseIndex].isDefault);
+      render();
+    }
+    function finishCaseRename(index, shouldSave) {
+      const numericIndex = Number(index);
+      if (!Number.isFinite(numericIndex) || !state.cases[numericIndex]) {
+        editingCaseIndex = -1;
+        editingCaseOriginalLabel = '';
+        editingCaseOriginalIsDefault = false;
+        render();
+        return;
+      }
+      const labelInput = content.querySelector('[data-edit-label="' + numericIndex + '"]');
+      const rawLabel = labelInput ? labelInput.value : state.cases[numericIndex].label;
+      if (isCaseRenameEmpty(rawLabel)) {
+        cancelCaseRename(numericIndex);
+        return;
+      }
+      const nextLabel = normalizeCaseLabel(rawLabel, numericIndex);
+      const renamed = nextLabel !== trimCaseLabel(editingCaseOriginalLabel);
+      state.cases[numericIndex] = {
+        ...state.cases[numericIndex],
+        label: nextLabel,
+        isDefault: renamed ? false : state.cases[numericIndex].isDefault === true,
+      };
+      editingCaseIndex = -1;
+      editingCaseOriginalLabel = '';
+      editingCaseOriginalIsDefault = false;
+      render();
+      if (shouldSave) {
+        scheduleCaseAutosave(true);
+      }
+    }
+    function cancelCaseRename(index) {
+      const numericIndex = Number(index);
+      if (!Number.isFinite(numericIndex) || !state.cases[numericIndex]) {
+        editingCaseIndex = -1;
+        editingCaseOriginalLabel = '';
+        editingCaseOriginalIsDefault = false;
+        render();
+        return;
+      }
+      state.cases[numericIndex] = {
+        ...state.cases[numericIndex],
+        label: editingCaseOriginalLabel || state.cases[numericIndex].label,
+        isDefault: editingCaseOriginalIsDefault,
+      };
+      editingCaseIndex = -1;
+      editingCaseOriginalLabel = '';
+      editingCaseOriginalIsDefault = false;
+      render();
+      scheduleCaseAutosave(true);
     }
     function scheduleCaseAutosave(immediate) {
       clearTimeout(saveCasesTimer);
@@ -4468,10 +4862,19 @@ class LeetCodeWorkbenchProvider {
     }
     document.getElementById('refresh').addEventListener('click', () => send({ type: 'refreshOfficial' }));
     content.addEventListener('click', (event) => {
-      const target = event.target && event.target.closest ? event.target.closest('button') : event.target;
-      if (!target || !target.dataset) return;
+      const elementTarget = eventElementTarget(event);
+      const target = elementTarget && elementTarget.closest ? elementTarget.closest('button') : elementTarget;
+      if (!target || target.disabled || !target.dataset) return;
+      if (target.dataset.togglePin !== undefined) {
+        toggleCasePin(Number(target.dataset.togglePin));
+        return;
+      }
+      if (target.dataset.rename !== undefined) {
+        startCaseRename(Number(target.dataset.rename));
+        return;
+      }
       if (target.dataset.addCase !== undefined) {
-        state.cases = currentCases().concat([{ label: '用例 ' + (state.cases.length + 1), value: '' }]);
+        state.cases = currentCases().concat([{ label: defaultCaseLabel(state.cases.length), value: '' }]);
         render();
         const textarea = content.querySelector('[data-edit="' + (state.cases.length - 1) + '"]');
         if (textarea) textarea.focus();
@@ -4488,23 +4891,88 @@ class LeetCodeWorkbenchProvider {
       }
       if (target.dataset.delete !== undefined) {
         const index = Number(target.dataset.delete);
-        state.cases = currentCases().filter((_, i) => i !== index).map((testCase, i) => ({ ...testCase, label: '用例 ' + (i + 1) }));
+        state.cases = currentCases().filter((_, i) => i !== index).map((testCase, i) => ({ ...testCase, label: normalizeCaseLabel(testCase && testCase.label, i) }));
+        editingCaseIndex = -1;
         render();
         scheduleCaseAutosave(true);
       }
     });
 	    content.addEventListener('input', (event) => {
-	      if (event.target && event.target.tagName === 'TEXTAREA') {
+      if (event.target && event.target.tagName === 'TEXTAREA') {
 	        autosizeTextarea(event.target);
 	        const index = Number(event.target.dataset.edit);
         if (Number.isFinite(index) && state.cases[index]) {
+          const changed = event.target.value !== state.cases[index].value;
           state.cases[index] = { ...state.cases[index], value: event.target.value };
+          if (changed) markCaseModified(index);
         }
         if (!caseInputComposing) {
           scheduleCaseAutosave(false);
 	        }
+	      } else if (event.target && event.target.classList && event.target.classList.contains('case-title-input')) {
+	        const index = Number(event.target.dataset.editLabel);
+        if (Number.isFinite(index) && state.cases[index]) {
+          const trimmedValue = Array.from(String(event.target.value || '')).slice(0, 6).join('');
+          if (event.target.value !== trimmedValue) {
+            event.target.value = trimmedValue;
+          }
+          if (updateCaseRenameValidity(event.target)) {
+            const nextLabel = trimCaseLabel(trimmedValue);
+            const changed = nextLabel !== trimCaseLabel(state.cases[index].label);
+            state.cases[index] = { ...state.cases[index], label: nextLabel };
+            if (changed) markCaseModified(index);
+            scheduleCaseAutosave(false);
+          } else {
+            clearTimeout(saveCasesTimer);
+          }
+        }
 	      }
 	    });
+	    content.addEventListener('keydown', (event) => {
+      if (event.target && event.target.classList && event.target.classList.contains('case-title-input')) {
+        const index = Number(event.target.dataset.editLabel);
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          finishCaseRename(index, true);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          cancelCaseRename(index);
+        }
+      }
+    });
+    content.addEventListener('focusout', (event) => {
+      if (event.target && event.target.classList && event.target.classList.contains('case-title-input')) {
+        const index = Number(event.target.dataset.editLabel);
+        setTimeout(() => {
+          if (editingCaseIndex === index) {
+            finishCaseRename(index, true);
+          }
+        }, 0);
+      }
+    });
+    function mergeIncomingCaseDrafts(nextState) {
+      if (editingCaseIndex < 0) return nextState;
+      if (!nextState || !nextState.isLeetCodeFile || !state.isLeetCodeFile) return nextState;
+      if (!nextState.uri || !state.uri || nextState.uri !== state.uri) return nextState;
+      const localCases = currentCases();
+      if (!localCases.length) return nextState;
+      return {
+        ...nextState,
+        cases: (nextState.cases || []).map((testCase, index) => {
+          const localCase = localCases[index];
+          if (!localCase) {
+            return testCase;
+          }
+          return {
+            ...testCase,
+            label: normalizeCaseLabel(localCase.label, index),
+            value: localCase.value,
+            isDefault: localCase.isDefault === true,
+            isPinned: localCase.isPinned === true,
+          };
+        }),
+      };
+    }
 	    content.addEventListener('scroll', (event) => {
 	      if (event.target && event.target.tagName === 'TEXTAREA') {
 	        showCaseScrollbar(event.target);
@@ -4521,18 +4989,26 @@ class LeetCodeWorkbenchProvider {
         autosizeTextarea(event.target);
         const index = Number(event.target.dataset.edit);
         if (Number.isFinite(index) && state.cases[index]) {
+          const changed = event.target.value !== state.cases[index].value;
           state.cases[index] = { ...state.cases[index], value: event.target.value };
+          if (changed) markCaseModified(index);
         }
         scheduleCaseAutosave(false);
       }
     });
+    if (casePane && typeof ResizeObserver === 'function') {
+      const casePaneResizeObserver = new ResizeObserver(scheduleCaseListLayout);
+      casePaneResizeObserver.observe(casePane);
+    }
+    window.addEventListener('resize', scheduleCaseListLayout);
     window.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'state') {
         const localActivityExpanded = !!state.activityExpanded;
         const localActivityRange = Number(state.activityRange || 7) || 7;
         const localDebugVisualTheme = debugVisualTheme();
         const localWorkspaceSplitRatio = clampWorkspaceSplit(state.workspaceSplitRatio || readWorkspaceSplit());
-        state = Object.assign({ activityExpanded: false, activityRange: 7 }, event.data.state || {}, {
+        const nextState = mergeIncomingCaseDrafts(event.data.state || {});
+        state = Object.assign({ activityExpanded: false, activityRange: 7 }, nextState, {
           activityExpanded: localActivityExpanded,
           activityRange: localActivityRange,
           debugVisualTheme: localDebugVisualTheme,
@@ -4549,6 +5025,22 @@ class LeetCodeWorkbenchProvider {
 }
 function registerLeetCodeWorkbench(context, baba, babaStr) {
   const provider = new LeetCodeWorkbenchProvider(context, baba, babaStr);
+  const loginMediatorName = "LeetCodeWorkbenchLoginMediator";
+  class LeetCodeWorkbenchLoginMediator extends BABAMediator {
+    static NAME = loginMediatorName;
+    constructor() {
+      super(LeetCodeWorkbenchLoginMediator.NAME);
+    }
+    listNotificationInterests() {
+      return [babaStr.USER_LOGIN_SUC, babaStr.USER_LOGIN_OUT];
+    }
+    handleNotification() {
+      provider.refresh(undefined, { preserveCurrentOnTransientMiss: true });
+    }
+  }
+  if (!baba.fa.hasMediator(loginMediatorName)) {
+    new LeetCodeWorkbenchLoginMediator();
+  }
   const subscriptions = [
     vscode.window.registerWebviewViewProvider("LCPRWorkbench", provider, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.window.onDidChangeActiveTextEditor((editor) => provider.refresh(editor, { preserveCurrentOnTransientMiss: true })),
@@ -4560,8 +5052,13 @@ function registerLeetCodeWorkbench(context, baba, babaStr) {
     vscode.commands.registerCommand("lcpr.workbench.allcase", () => provider.runAction("allcase")),
     vscode.commands.registerCommand("lcpr.workbench.debug", () => provider.runAction("debug")),
   ];
-  const disposable = vscode.Disposable.from(...subscriptions, { dispose: () => provider.dispose() });
+  const disposable = vscode.Disposable.from(...subscriptions, {
+    dispose: () => {
+      baba.fa.removeMediator(loginMediatorName);
+      provider.dispose();
+    },
+  });
   context.subscriptions.push(disposable);
   return disposable;
 }
-export { registerLeetCodeWorkbench };
+export { LeetCodeWorkbenchProvider, registerLeetCodeWorkbench };

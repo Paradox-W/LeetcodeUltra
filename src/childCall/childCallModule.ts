@@ -72,6 +72,10 @@ class ExecuteService {
                 }
             }
             try {
+                if (this.nodeExecutable === "node" && !(0, SystemUtils_1.useWsl)()) {
+                    context.globalState.update(ConstDefind_1.leetcodeHasInited, true);
+                    return true;
+                }
                 yield this.callWithMsg("正在检查Node环境~", this.nodeExecutable, ["-v"]);
             }
             catch (error) {
@@ -120,7 +124,7 @@ class ExecuteService {
             return yield this.callWithMsg("正在获取角色信息~", this.nodeExecutable, [
                 yield this.getLeetCodeBinaryPath(),
                 "user",
-            ]);
+            ], { shell: true, timeout: 8000 });
         });
     }
     signOut() {
@@ -453,10 +457,27 @@ class ExecuteService {
             if (!addToFavorite) {
                 commandParams.push("-d");
             }
-            yield this.callWithMsg("正在更新收藏列表~", this.nodeExecutable, commandParams);
+            const result = yield this.callWithMsg("正在更新收藏列表~", this.nodeExecutable, commandParams);
+            let parsed;
+            try {
+                parsed = JSON.parse(result);
+            }
+            catch (_) {
+                parsed = undefined;
+            }
+            if (parsed && parsed.code === 100) {
+                return parsed;
+            }
+            if (parsed && parsed.code < 0) {
+                throw new Error(parsed.msg || parsed.error || "favorite update failed");
+            }
+            if (typeof result === "string" && (result.includes("icon.like") || result.includes("icon.unlike"))) {
+                return result;
+            }
+            throw new Error("Unexpected favorite response");
         });
     }
-    trySignIn(loginMethod) {
+    trySignIn(loginMethod, credentials, onChallenge) {
         return __awaiter(this, void 0, void 0, function* () {
             const loginArgsMapping = new Map([
                 ["LeetCode", "-l"],
@@ -472,6 +493,8 @@ class ExecuteService {
             const cmd = [yield this.getLeetCodeBinaryPath(), "user", commandArg];
             return yield this.callWithMsg("正在登录中~~~~", this.nodeExecutable, cmd, undefined, this.trySignInProcInit, {
                 loginMethod: loginMethod,
+                credentials: credentials,
+                onChallenge: onChallenge,
             });
         });
     }
@@ -484,22 +507,43 @@ class ExecuteService {
             });
         });
     }
+    normalizeCookiePart(value) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) {
+            return "";
+        }
+        return trimmed[0] === '"' || trimmed[0] === "'" ? trimmed : `"${trimmed}"`;
+    }
+    buildCookieCredential(credentials) {
+        const directCookie = String((credentials === null || credentials === void 0 ? void 0 : credentials.cookie) || "").trim();
+        if (directCookie) {
+            return directCookie;
+        }
+        const csrfToken = String((credentials === null || credentials === void 0 ? void 0 : credentials.csrfToken) || "").trim();
+        const leetcodeSession = String((credentials === null || credentials === void 0 ? void 0 : credentials.leetcodeSession) || "").trim();
+        if (!csrfToken || !leetcodeSession) {
+            return undefined;
+        }
+        return `csrftoken=${this.normalizeCookiePart(csrfToken)};LEETCODE_SESSION=${this.normalizeCookiePart(leetcodeSession)};`;
+    }
     trySignInProcInit(arg, child_process, resolve, reject) {
         var _a, _b, _c, _d;
         return __awaiter(this, void 0, void 0, function* () {
+            const credentials = arg.credentials || {};
+            const isByCookie = arg.loginMethod === "Cookie";
+            let waitingForTwoFactor = false;
             (_a = child_process.stdout) === null || _a === void 0 ? void 0 : _a.on("data", (data) => __awaiter(this, void 0, void 0, function* () {
                 var _e, _f, _g;
                 data = data.toString();
                 BABA_1.BABA.getProxy(BABA_1.BabaStr.LogOutputProxy).get_log().append(data);
-                if (data.includes("twoFactorCode")) {
-                    const twoFactor = yield vscode_2.window.showInputBox({
-                        prompt: "Enter two-factor code.",
-                        ignoreFocusOut: true,
-                        validateInput: (s) => (s && s.trim() ? undefined : "The input must not be empty"),
-                    });
+                if (data.includes("twoFactorCode") && !waitingForTwoFactor) {
+                    waitingForTwoFactor = true;
+                    const twoFactor = typeof arg.onChallenge === "function"
+                        ? yield arg.onChallenge({ type: "twoFactorCode", loginMethod: arg.loginMethod })
+                        : undefined;
                     if (!twoFactor) {
                         child_process.kill();
-                        return resolve(undefined);
+                        return reject(new Error("登录需要在侧栏中完成两步验证码输入"));
                     }
                     (_e = child_process.stdin) === null || _e === void 0 ? void 0 : _e.write(`${twoFactor}\n`);
                 }
@@ -512,7 +556,7 @@ class ExecuteService {
                 }
                 if (successMatch.code == 100) {
                     (_f = child_process.stdin) === null || _f === void 0 ? void 0 : _f.end();
-                    let result = successMatch.user_name || name || "没有取到用户名"; //successMatch.user_name;
+                    let result = successMatch.user_name || (isByCookie ? "browser-login" : name) || "没有取到用户名";
                     return resolve(result);
                 }
                 else if (successMatch.code < 0) {
@@ -524,73 +568,34 @@ class ExecuteService {
                 BABA_1.BABA.getProxy(BABA_1.BabaStr.LogOutputProxy).get_log().append(data.toString());
             });
             child_process.on("error", reject);
-            const name = yield vscode_2.window.showInputBox({
-                prompt: "Enter username or E-mail.",
-                ignoreFocusOut: true,
-                validateInput: (s) => (s && s.trim() ? undefined : "The input must not be empty"),
-            });
+            const suppliedName = String(credentials.login || "").trim();
+            const name = isByCookie
+                ? suppliedName || "browser-login"
+                : suppliedName;
             if (!name) {
                 child_process.kill();
-                return resolve(undefined);
+                return reject(new Error("缺少登录账号，请在侧栏登录面板中补全信息"));
             }
             (_c = child_process.stdin) === null || _c === void 0 ? void 0 : _c.write(`${name}\n`);
-            const isByCookie = arg.loginMethod === "Cookie";
             let pwd = undefined;
             if (isByCookie) {
-                let cf_v = yield vscode_2.window.showInputBox({
-                    title: '正确的cookie例子csrftoken="xxx"; LEETCODE_SESSION="yyy";',
-                    prompt: "输入例子中csrftoken的值xxx",
-                    ignoreFocusOut: true,
-                    validateInput: (s) => (s ? undefined : "csrftoken不为空"),
-                });
-                let ls_v = yield vscode_2.window.showInputBox({
-                    title: '正确的cookie例子csrftoken="xxx"; LEETCODE_SESSION="yyy";',
-                    prompt: "输入例子中LEETCODE_SESSION的值yyy",
-                    ignoreFocusOut: true,
-                    validateInput: (s) => (s && s.trim() ? undefined : "LEETCODE_SESSION不为空"),
-                });
-                if (cf_v && ls_v) {
-                    let cf_v_t = cf_v.trim();
-                    let ls_v_t = ls_v.trim();
-                    // 判断输入的有没有 " '
-                    let cf_flag = cf_v_t[0] == '"' || cf_v_t[0] == "'";
-                    let ls_flag = ls_v_t[0] == '"' || ls_v_t[0] == "'";
-                    if (cf_flag && ls_flag) {
-                        pwd = `csrftoken=${cf_v_t};LEETCODE_SESSION=${ls_v_t};`;
-                    }
-                    else if (cf_flag) {
-                        pwd = `csrftoken=${cf_v_t};LEETCODE_SESSION="${ls_v_t}";`;
-                    }
-                    else if (ls_flag) {
-                        pwd = `csrftoken="${cf_v_t}";LEETCODE_SESSION=${ls_v_t};`;
-                    }
-                    else {
-                        pwd = `csrftoken="${cf_v_t}";LEETCODE_SESSION="${ls_v_t}";`;
-                    }
-                }
-                // csrftoken="xxxx"; LEETCODE_SESSION="xxxx";
+                pwd = this.buildCookieCredential(credentials);
             }
             else if (arg.loginMethod === "curltype") {
-                pwd = yield vscode_2.window.showInputBox({
-                    prompt: "输入从浏览器复制来的cURL请求.",
-                    password: true,
-                    ignoreFocusOut: true,
-                    validateInput: (s) => (s ? undefined : "Password must not be empty"),
-                });
+                pwd = credentials.password;
                 pwd = pwd === null || pwd === void 0 ? void 0 : pwd.trim();
                 pwd = pwd === null || pwd === void 0 ? void 0 : pwd.replace(/\\  /g, ' ');
             }
-            else {
-                pwd = yield vscode_2.window.showInputBox({
-                    prompt: "Enter password.",
-                    password: true,
-                    ignoreFocusOut: true,
-                    validateInput: (s) => (s ? undefined : "Password must not be empty"),
-                });
+            else if (credentials.password) {
+                pwd = String(credentials.password);
             }
             if (!pwd) {
                 child_process.kill();
-                return resolve(undefined);
+                return reject(new Error(isByCookie
+                    ? "缺少 Cookie 信息，请在侧栏登录面板中填写 csrftoken 与 LEETCODE_SESSION"
+                    : arg.loginMethod === "curltype"
+                        ? "缺少 cURL 登录信息，请从侧栏重新发起登录"
+                        : "缺少登录密码，请在侧栏登录面板中补全信息"));
             }
             (_d = child_process.stdin) === null || _d === void 0 ? void 0 : _d.write(`${pwd}\n`);
         });

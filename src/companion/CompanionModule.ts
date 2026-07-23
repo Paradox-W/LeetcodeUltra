@@ -2460,14 +2460,17 @@ ${select(" .hljs-strong")} {
         const d = this.activeDescriptionForMode();
         const s = this.state.solution;
         const activeTab = this.resolveActiveTab();
-        if (activeTab === "submissions") {
+        if (activeTab === "submissions" || activeTab === "empty") {
             return "";
         }
         const title = this.formatProblemTitle((d === null || d === void 0 ? void 0 : d.title) || (s === null || s === void 0 ? void 0 : s.title) || "力扣助手");
         const url = (d === null || d === void 0 ? void 0 : d.url) || (s === null || s === void 0 ? void 0 : s.url);
+        const favoriteBadge = (this.state.node && this.state.node.isFavorite)
+            ? `<span class="lcpr-favorite-badge" title="已收藏" aria-label="已收藏">♥</span>`
+            : "";
         return `<header class="lcpr-header">
   <div class="lcpr-title-row">
-    <h1>${url ? `<a href="${this.escapeAttr(url)}">${this.escapeHtml(title)}</a>` : this.escapeHtml(title)}</h1>
+    <h1>${url ? `<a href="${this.escapeAttr(url)}">${this.escapeHtml(title)}</a>` : this.escapeHtml(title)}${favoriteBadge}</h1>
     ${this.shouldShowCodeNow(activeTab) ? `<button class="lcpr-icon-button" data-command="showProblem" title="开始写代码" aria-label="开始写代码">&lt;/&gt;</button>` : ""}
   </div>
 </header>`;
@@ -3969,6 +3972,15 @@ h1 a:hover, h1 a:focus, h1 a:active {
   color: inherit;
   text-decoration: none !important;
   border-bottom: 0 !important;
+}
+.lcpr-favorite-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  color: var(--vscode-charts-red, #e05a5a);
+  font-size: 18px;
+  line-height: 1;
+  vertical-align: middle;
 }
 .lcpr-icon-button {
   flex: 0 0 auto;

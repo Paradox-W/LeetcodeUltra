@@ -53,7 +53,7 @@
     "main.contributes.commands.lcpr.aiDebug.setManualVariables.title": "AI Debug: Set Manual Variables",
     "main.contributes.commands.lcpr.aiDebug.setMaxVariables.title": "AI Debug: Set Variable Count",
     "main.contributes.commands.lcpr.aiDebug.setVisualTheme.title": "AI Debug: Set Visual Theme",
-    "main.contributes.viewsContainers.activitybar.lcpr_bar.title": "LCPR",
+    "main.contributes.viewsContainers.activitybar.lcpr_bar.title": "LEETCODEULTRA",
     "main.contributes.views.lcpr_bar.QuestionExplorer.name": "Problems",
     "main.contributes.views.lcpr_bar.BricksExplorer.name": "repeat practice",
     "main.contributes.submenus.lcpr.editorAction.label": "LCPRmenu",

@@ -7,7 +7,7 @@
  * Copyright (c) 2022  ccagml . All rights reserved.
  */
 
-import { TreeDataProvider, EventEmitter, Event, TreeItem, TreeItemCollapsibleState } from "vscode";
+import { TreeDataProvider, EventEmitter, Event, TreeItem, TreeItemCollapsibleState, ExtensionContext } from "vscode";
 import { BricksNormalId, BricksType, ISubmitEvent } from "../model/ConstDefind";
 import { bricksViewController } from "../controller/BricksViewController";
 import { CreateTreeNodeModel, TreeNodeModel, TreeNodeType } from "../model/TreeNodeModel";
@@ -19,6 +19,14 @@ export class BricksDataService implements TreeDataProvider<TreeNodeModel> {
   private onDidChangeTreeDataEvent: EventEmitter<TreeNodeModel | undefined | null> = new EventEmitter<
     TreeNodeModel | undefined | null
   >();
+  private context?: ExtensionContext;
+  private readonly rootOrderStorageKey = "leetcodeUltra.bricksExplorer.rootOrder";
+  private readonly rootNodeTypes = new Set<TreeNodeType>([
+    TreeNodeType.Bricks_NeedReview,
+    TreeNodeType.Bricks_NoReview,
+    TreeNodeType.Bricks_TodaySubmit,
+    TreeNodeType.Bricks_Diy,
+  ]);
   // tslint:disable-next-line:member-ordering
   public readonly onDidChangeTreeData: Event<any> = this.onDidChangeTreeDataEvent.event;
 
@@ -26,9 +34,71 @@ export class BricksDataService implements TreeDataProvider<TreeNodeModel> {
     this.onDidChangeTreeDataEvent.fire(null);
   }
 
-  public async initialize() {
+  public async initialize(context?: ExtensionContext) {
+    this.context = context;
     await bricksDao.init();
     await groupDao.init();
+  }
+
+  public canReorderRootNode(node?: TreeNodeModel): boolean {
+    return !!node && this.rootNodeTypes.has(node.nodeType);
+  }
+
+  public getRootNodeIdentity(node: TreeNodeModel): string {
+    return `${node.nodeType}|${node.id}|${node.groupTime || 0}`;
+  }
+
+  private getSavedRootOrder(): string[] {
+    return this.context?.workspaceState.get<string[]>(this.rootOrderStorageKey, []) || [];
+  }
+
+  private async saveRootOrder(order: string[]): Promise<void> {
+    if (!this.context?.workspaceState) {
+      return;
+    }
+    await this.context.workspaceState.update(this.rootOrderStorageKey, order);
+  }
+
+  private applySavedRootOrder(nodes: TreeNodeModel[]): TreeNodeModel[] {
+    const savedOrder = this.getSavedRootOrder();
+    if (!savedOrder.length) {
+      return nodes;
+    }
+    const savedIndex = new Map<string, number>();
+    savedOrder.forEach((key, index) => savedIndex.set(key, index));
+    return nodes
+      .map((node, index) => ({ node, index, key: this.getRootNodeIdentity(node) }))
+      .sort((a, b) => {
+        const aSaved = savedIndex.has(a.key) ? savedIndex.get(a.key)! : Number.MAX_SAFE_INTEGER;
+        const bSaved = savedIndex.has(b.key) ? savedIndex.get(b.key)! : Number.MAX_SAFE_INTEGER;
+        if (aSaved !== bSaved) {
+          return aSaved - bSaved;
+        }
+        return a.index - b.index;
+      })
+      .map((entry) => entry.node);
+  }
+
+  public async reorderRootNodes(sourceKeys: string[], targetNode?: TreeNodeModel): Promise<void> {
+    if (!sourceKeys.length) {
+      return;
+    }
+    if (targetNode && !this.canReorderRootNode(targetNode)) {
+      return;
+    }
+    const currentOrder = this.applySavedRootOrder(await bricksViewController.getRootNodes())
+      .filter((node) => this.canReorderRootNode(node))
+      .map((node) => this.getRootNodeIdentity(node));
+    const moveKeys = [...new Set(sourceKeys)].filter((key) => currentOrder.includes(key));
+    if (!moveKeys.length) {
+      return;
+    }
+    const remaining = currentOrder.filter((key) => !moveKeys.includes(key));
+    const targetKey = targetNode ? this.getRootNodeIdentity(targetNode) : undefined;
+    const insertIndex = targetKey ? remaining.indexOf(targetKey) : remaining.length;
+    remaining.splice(insertIndex >= 0 ? insertIndex : remaining.length, 0, ...moveKeys);
+    await this.saveRootOrder(remaining);
+    this.fire();
   }
 
   // 节点的内容
@@ -72,7 +142,7 @@ export class BricksDataService implements TreeDataProvider<TreeNodeModel> {
       ];
     }
     if (!element) {
-      return await bricksViewController.getRootNodes();
+      return this.applySavedRootOrder(await bricksViewController.getRootNodes());
     } else {
 
       if (element.nodeType == TreeNodeType.Bricks_TodaySubmit) {
@@ -208,7 +278,7 @@ export class BricksDataMediator extends BABAMediator {
       case BabaStr.VSCODE_DISPOST:
         break;
       case BabaStr.InitFile:
-        await bricksDataService.initialize();
+        await bricksDataService.initialize(body);
         break;
       case BabaStr.BricksData_newBrickGroupFinish:
       case BabaStr.BricksData_removeBrickGroupFinish:

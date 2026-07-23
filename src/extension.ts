@@ -7,7 +7,8 @@
  * Copyright (c) 2022 ccagml . All rights reserved.
  */
 
-import { ConfigurationTarget, ExtensionContext, window, commands, Uri, CommentReply, TextDocument, workspace } from "vscode";
+import { ConfigurationTarget, ExtensionContext, ExtensionMode, window, commands, Uri, CommentReply, TextDocument, workspace } from "vscode";
+import * as vscode from "vscode";
 import { TreeNodeModel } from "./model/TreeNodeModel";
 import { treeColor } from "./treeColor/TreeColorModule";
 import { ShowMessage } from "./utils/OutputUtils";
@@ -39,6 +40,17 @@ import { registerAiDebug } from "./aiDebug/AiDebugModule";
 import { registerDebugVisualizer } from "./debugVisualizer/DebugVisualizerModule";
 import { treeViewController } from "./controller/TreeViewController";
 import { browserLoginService } from "./auth/BrowserLoginService";
+import {
+  createOrResumeStudyPlan,
+  openStudyPlan,
+  pauseStudyPlan,
+  refreshStudyPlan,
+  registerStudyPlanView,
+  resetStudyPlan,
+  studyPlanService,
+  StudyPlanMediator,
+  StudyPlanProxy,
+} from "./studyPlan/StudyPlanModule";
 
 //==================================BABA========================================
 
@@ -50,6 +62,55 @@ import { browserLoginService } from "./auth/BrowserLoginService";
 
 let lcpr_timer_sec;
 let lcpr_timer_min;
+const QUESTION_EXPLORER_ROOT_MIME = "application/vnd.leetcodeultra.question-explorer-root";
+const BRICKS_EXPLORER_ROOT_MIME = "application/vnd.leetcodeultra.bricks-explorer-root";
+
+function createRootReorderController(
+  mimeType: string,
+  canDrag: (node?: TreeNodeModel) => boolean,
+  getIdentity: (node: TreeNodeModel) => string,
+  onDrop: (sourceKeys: string[], targetNode?: TreeNodeModel) => Promise<void>
+): any {
+  return {
+    dragMimeTypes: [mimeType],
+    dropMimeTypes: [mimeType],
+    handleDrag: async (sourceNodes: TreeNodeModel[], dataTransfer: any) => {
+      const sourceKeys = (sourceNodes || []).filter((node) => canDrag(node)).map((node) => getIdentity(node));
+      if (!sourceKeys.length) {
+        return;
+      }
+      const DataTransferItemCtor = (vscode as any).DataTransferItem;
+      if (!DataTransferItemCtor) {
+        return;
+      }
+      dataTransfer.set(mimeType, new DataTransferItemCtor(JSON.stringify(sourceKeys)));
+    },
+    handleDrop: async (targetNode: TreeNodeModel | undefined, dataTransfer: any) => {
+      const item = dataTransfer.get(mimeType);
+      if (!item) {
+        return;
+      }
+      let raw = item.value;
+      if (raw === undefined && typeof item.asString === "function") {
+        raw = await item.asString();
+      }
+      let sourceKeys: string[] = [];
+      if (typeof raw === "string") {
+        try {
+          sourceKeys = JSON.parse(raw);
+        } catch (_) {
+          sourceKeys = [];
+        }
+      } else if (Array.isArray(raw)) {
+        sourceKeys = raw;
+      }
+      if (!sourceKeys.length) {
+        return;
+      }
+      await onDrop(sourceKeys, targetNode);
+    },
+  };
+}
 
 function runStartupTaskInBackground(name: string, task: () => Promise<void>, delayMs: number = 1500): void {
   setTimeout(() => {
@@ -68,6 +129,19 @@ function runStartupTaskInBackground(name: string, task: () => Promise<void>, del
 export async function activate(context: ExtensionContext): Promise<void> {
   try {
     browserLoginService.initialize(context);
+    studyPlanService.initialize(context);
+    const questionExplorerDragAndDropController = createRootReorderController(
+      QUESTION_EXPLORER_ROOT_MIME,
+      (node) => treeDataService.canReorderRootNode(node),
+      (node) => treeDataService.getRootNodeIdentity(node),
+      (sourceKeys, targetNode) => treeDataService.reorderRootNodes(sourceKeys, targetNode)
+    );
+    const bricksExplorerDragAndDropController = createRootReorderController(
+      BRICKS_EXPLORER_ROOT_MIME,
+      (node) => bricksDataService.canReorderRootNode(node),
+      (node) => bricksDataService.getRootNodeIdentity(node),
+      (sourceKeys, targetNode) => bricksDataService.reorderRootNodes(sourceKeys, targetNode)
+    );
 
     BABA.init([
       StatusBarTimeMediator,
@@ -104,6 +178,8 @@ export async function activate(context: ExtensionContext): Promise<void> {
       RecentContestMediator,
       ContestQuestionProxy,
       ContestQuestionMediator,
+      StudyPlanProxy,
+      StudyPlanMediator,
     ]);
 
     // 资源管理
@@ -116,6 +192,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
       registerProblemListDisplayOptions(context, treeDataService),
       registerAiDebug(context),
       registerDebugVisualizer(context),
+      registerStudyPlanView(context),
       window.registerUriHandler({ handleUri: browserLoginService.handleUriSignIn }),
       workspace.onDidOpenTextDocument((document) => treeViewController.ensureCppIntelliSenseForDocument(document)),
       window.onDidChangeActiveTextEditor((editor) => {
@@ -124,9 +201,22 @@ export async function activate(context: ExtensionContext): Promise<void> {
         }
       }),
       window.registerFileDecorationProvider(treeColor),
-      window.createTreeView("QuestionExplorer", { treeDataProvider: treeDataService, showCollapseAll: true }),
-      window.createTreeView("BricksExplorer", { treeDataProvider: bricksDataService, showCollapseAll: true }),
+      window.createTreeView("QuestionExplorer", {
+        treeDataProvider: treeDataService,
+        showCollapseAll: true,
+        dragAndDropController: questionExplorerDragAndDropController,
+      } as any),
+      window.createTreeView("BricksExplorer", {
+        treeDataProvider: bricksDataService,
+        showCollapseAll: true,
+        dragAndDropController: bricksExplorerDragAndDropController,
+      } as any),
       commands.registerCommand("lcpr.deleteCache", () => BABA.sendNotification(BabaStr.DeleteCache)),
+      commands.registerCommand("lcpr.studyPlan.open", openStudyPlan),
+      commands.registerCommand("lcpr.studyPlan.createOrResume", createOrResumeStudyPlan),
+      commands.registerCommand("lcpr.studyPlan.pause", pauseStudyPlan),
+      commands.registerCommand("lcpr.studyPlan.refresh", refreshStudyPlan),
+      commands.registerCommand("lcpr.studyPlan.reset", resetStudyPlan),
       commands.registerCommand("lcpr.toggleLeetCodeCn", () => {
         BABA.sendNotification(BabaStr.TreeData_switchEndpoint);
       }),
@@ -277,6 +367,17 @@ export async function activate(context: ExtensionContext): Promise<void> {
       )
     );
 
+    if (context.extensionMode === ExtensionMode.Test) {
+      context.subscriptions.push(
+        commands.registerCommand("lcpr.studyPlan.__inspect", () => studyPlanService.getDocument()),
+        commands.registerCommand("lcpr.studyPlan.__submit", (event) => studyPlanService.onSubmit(event || {})),
+        commands.registerCommand("lcpr.studyPlan.__startReview", (sessionId) => studyPlanService.testStartReview(String(sessionId))),
+        commands.registerCommand("lcpr.studyPlan.__understanding", (sessionId) => studyPlanService.testUnderstanding(String(sessionId))),
+        commands.registerCommand("lcpr.studyPlan.__rate", (sessionId, rating) => studyPlanService.testRate(String(sessionId), rating)),
+        commands.registerCommand("lcpr.studyPlan.__reload", () => studyPlanService.testReload())
+      );
+    }
+
     await BABA.sendNotificationAsync(BabaStr.InitWorkspaceFolder, context);
     workspace.textDocuments.forEach((document) => treeViewController.ensureCppIntelliSenseForDocument(document));
     if (window.activeTextEditor) {
@@ -284,8 +385,14 @@ export async function activate(context: ExtensionContext): Promise<void> {
     }
     await BABA.sendNotificationAsync(BabaStr.InitFile, context);
     await BABA.sendNotificationAsync(BabaStr.InitEnv, context);
-    await BABA.sendNotificationAsync(BabaStr.InitLoginStatus);
-    runStartupTaskInBackground("StartReadData", () => BABA.sendNotificationAsync(BabaStr.StartReadData));
+    runStartupTaskInBackground(
+      "InitLoginStatus",
+      async () => {
+        await BABA.sendNotificationAsync(BabaStr.InitLoginStatus);
+        await BABA.sendNotificationAsync(BabaStr.StartReadData);
+      },
+      0
+    );
   } catch (error) {
     BABA.getProxy(BabaStr.LogOutputProxy).get_log().appendLine(error.toString());
     ShowMessage("Extension initialization failed. Please open output channel for details.", OutPutType.error);
